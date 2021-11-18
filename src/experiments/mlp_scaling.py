@@ -105,9 +105,11 @@ def train_student(
     teacher: eg.Model,
     n_train_samples: int,
     ds_test: dict[str, jnp.ndarray],
+    learning_rate: float = 3e-4,
     batch_size: int = 256,
     max_epochs: int = 512,
     seed: int = 42,
+    verbose: int = 0,
 ) -> TrainResult:
     rng1, rng2 = jax.random.split(jax.random.PRNGKey(seed))
 
@@ -118,7 +120,7 @@ def train_student(
             eg.losses.MeanSquaredError(),
             # eg.regularizers.GlobalL2(l=1e-4),
         ],
-        optimizer=optax.adam(1e-3),
+        optimizer=optax.adam(learning_rate),
     )
 
     ds_train = get_iid_dataset(
@@ -135,6 +137,8 @@ def train_student(
         shuffle=True,
         epochs=max_epochs,
         callbacks=[eg.callbacks.EarlyStopping(monitor="val_loss", patience=3)],
+        verbose=verbose,
+        drop_remaining=False,
     )
 
     return TrainResult(model=student, history=history)
