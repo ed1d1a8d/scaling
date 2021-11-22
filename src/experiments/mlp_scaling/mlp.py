@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import elegy as eg
 import jax
 import jax.numpy as jnp
@@ -10,13 +8,13 @@ import optax
 class MLP(eg.Module):
     def __init__(
         self,
-        input_shape: tuple[int, ...],
+        input_dim: int,
         layer_widths: tuple[int, ...],
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.layer_widths = layer_widths
-        self.input_shape = input_shape
+        self.input_dim = input_dim
 
     @eg.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -44,7 +42,7 @@ def get_random_mlp(
     model = eg.Model(module=mlp, seed=seed)
 
     assert not model.initialized
-    model.predict(jnp.zeros(mlp.input_shape))
+    model.predict(jnp.zeros(mlp.input_dim))
     assert model.initialized
 
     return model
@@ -85,19 +83,13 @@ def get_iid_dataset(
     xs = jax.random.uniform(
         minval=-1,
         maxval=1,
-        shape=(n_samples,) + model.module.input_shape,
+        shape=(n_samples, model.module.input_dim),
         key=rng,
     )
 
     ys = model.predict(xs, batch_size=batch_size)
 
     return dict(xs=xs, ys=ys)
-
-
-@dataclass
-class TrainResult:
-    model: eg.Model
-    history: eg.callbacks.History
 
 
 def train_student(
@@ -110,7 +102,7 @@ def train_student(
     max_epochs: int = 512,
     seed: int = 42,
     verbose: int = 0,
-) -> TrainResult:
+) -> eg.callbacks.History:
     rng1, rng2 = jax.random.split(jax.random.PRNGKey(seed))
 
     student = eg.Model(
@@ -129,7 +121,7 @@ def train_student(
         rng=rng2,
     )
 
-    history = student.fit(
+    return student.fit(
         inputs=ds_train["xs"],
         labels=ds_train["ys"],
         validation_data=(ds_test["xs"], ds_test["ys"]),
@@ -140,5 +132,3 @@ def train_student(
         verbose=verbose,
         drop_remaining=False,
     )
-
-    return TrainResult(model=student, history=history)

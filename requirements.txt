@@ -17,3 +17,4 @@ flake8==4.0.1
 isort==5.10.0
 jupyterlab==3.2.2
 jupyterlab-code-formatter==1.4.10
+mlflow==1.21.0
