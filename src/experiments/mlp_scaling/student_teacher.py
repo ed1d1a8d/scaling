@@ -1,4 +1,5 @@
 import dataclasses
+import pathlib
 from collections import defaultdict
 
 import elegy as eg
@@ -17,7 +18,7 @@ class ExperimentConfig:
     n_test: int = 2048
     ds_test_seed: int = -2
 
-    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 22))
+    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 25))
     trials_per_size: int = 8
 
 
@@ -32,22 +33,23 @@ def run_experiment(cfg: ExperimentConfig):
     )
 
     teacher = mlp.get_random_mlp(mlp=teacher_mod, seed=-1)
+    teacher.save(path=mlflow.get_artifact_uri("teacher"))
+    if teacher_mod.input_dim == 2:
+        mlp.viz_model(teacher, 512)
+        mlflow.log_figure(figure=plt.gcf(), artifact_file="teacher-viz.png")
+        plt.cla()
+
     ds_test = mlp.get_iid_dataset(
         model=teacher,
         n_samples=cfg.n_test,
         rng=jax.random.PRNGKey(-2),
     )
 
-    if teacher_mod.input_dim == 2:
-        mlp.viz_model(teacher, 512)
-        mlflow.log_figure(figure=plt.gcf(), artifact_file="teacher-viz.png")
-        plt.cla()
-
     histories: dict[int, list[eg.callbacks.History]] = defaultdict(list)
 
     for n in cfg.train_sizes:
         keys = jax.random.split(jax.random.PRNGKey(n), cfg.trials_per_size)
-        for i, key in enumerate(keys):
+        for key in keys:
             print(f"Training for {n=}")
             hist = mlp.train_student(
                 student_mod=student_mod,
@@ -75,7 +77,13 @@ def main():
     cfg = ExperimentConfig()
 
     with mlflow.start_run():
+        # Log current script
+        mlflow.log_artifact(local_path=pathlib.Path(__file__))
+
+        # Log experiment cfg
         mlflow.log_params(dataclasses.asdict(cfg))
+
+        # Run experiment
         run_experiment(cfg)
 
 

@@ -3,6 +3,7 @@ import pathlib
 import tempfile
 from typing import Optional
 
+import elegy as eg
 import flax.serialization
 import mlflow
 import msgpack
@@ -23,6 +24,7 @@ def mlflow_log_jax(
 
         mlflow.log_artifacts(local_dir=td)
 
+
 def msgpack_restore_v2(encoded_pytree: bytes):
     """
     flax.serialization._msgpack_ext_unpack with strict_map_key=False.
@@ -37,18 +39,31 @@ def msgpack_restore_v2(encoded_pytree: bytes):
     return flax.serialization._unchunk_array_leaves_in_place(state_dict)
 
 
-def mlflow_read_jax(
+def mlflow_abs_path(
     run_id: str,
     rel_artifact_path: str,
 ):
     run = mlflow.get_run(run_id)
+    return os.path.join(REPO_BASE, run.info.artifact_uri, rel_artifact_path)
 
-    abs_artifact_path = os.path.join(
-        REPO_BASE, run.info.artifact_uri, rel_artifact_path
-    )
-    with open(abs_artifact_path, "rb") as f:
+
+def mlflow_read_jax(
+    run_id: str,
+    rel_artifact_path: str,
+):
+    with open(
+        mlflow_abs_path(run_id, rel_artifact_path),
+        "rb",
+    ) as f:
         b = f.read()
         return msgpack_restore_v2(b)
+
+
+def mlflow_load_model(
+    run_id: str,
+    rel_artifact_path: str,
+):
+    return eg.load(mlflow_abs_path(run_id, rel_artifact_path))
 
 
 def mlflow_init():
