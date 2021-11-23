@@ -1,9 +1,9 @@
 import dataclasses
-import os
 from collections import defaultdict
 
 import elegy as eg
 import jax
+import matplotlib.pyplot as plt
 import mlflow
 import src.experiments.mlp_scaling.mlp as mlp
 import src.utils as utils
@@ -12,12 +12,12 @@ import src.utils as utils
 @dataclasses.dataclass
 class ExperimentConfig:
     input_dim: int = 2
-    layer_widths: tuple[int, ...] = (96, 192, 1024, 42, 5, 1)
+    layer_widths: tuple[int, ...] = (96, 192, 1)  # 1024, 42, 5, 1)
 
     n_test: int = 2048
     ds_test_seed: int = -2
 
-    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 3))
+    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 22))
     trials_per_size: int = 8
 
 
@@ -37,6 +37,11 @@ def run_experiment(cfg: ExperimentConfig):
         n_samples=cfg.n_test,
         rng=jax.random.PRNGKey(-2),
     )
+
+    if teacher_mod.input_dim == 2:
+        mlp.viz_model(teacher, 512)
+        mlflow.log_figure(figure=plt.gcf(), artifact_file="teacher-viz.png")
+        plt.cla()
 
     histories: dict[int, list[eg.callbacks.History]] = defaultdict(list)
 
@@ -64,8 +69,8 @@ def run_experiment(cfg: ExperimentConfig):
 
 
 def main():
-    os.environ["MLFLOW_EXPERIMENT_NAME"] = "mlp-student-teacher"
-    mlflow.set_tracking_uri("/home/gridsan/twang/code/scaling/mlruns")
+    utils.mlflow_init()
+    mlflow.set_experiment("mlp-student-teacher")
 
     cfg = ExperimentConfig()
 
