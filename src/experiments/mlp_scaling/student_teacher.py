@@ -4,22 +4,81 @@ from collections import defaultdict
 
 import elegy as eg
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import mlflow
+import optax
 import src.experiments.mlp_scaling.mlp as mlp
 import src.utils as utils
 
 
 @dataclasses.dataclass
 class ExperimentConfig:
-    input_dim: int = 2
+    input_dim: int = 8
     layer_widths: tuple[int, ...] = (96, 192, 1)  # 1024, 42, 5, 1)
 
-    n_test: int = 2048
+    n_test: int = 1024
     ds_test_seed: int = -2
 
     train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 25))
-    trials_per_size: int = 8
+    trials_per_size: int = 4
+
+    early_stopping: bool = True  # Whether to use early stopping
+    early_stopping_patience: int = 16
+    early_stopping_monitor: str = "loss"
+
+    learning_rate: float = 3e-2
+    max_epochs: int = 512
+    batch_size: int = 256
+
+
+def train_student(
+    student_mod: eg.Module,
+    teacher: eg.Model,
+    n_train_samples: int,
+    ds_test: dict[str, jnp.ndarray],
+    cfg: ExperimentConfig,
+    seed: int = 42,
+    verbose: int = 0,
+) -> eg.callbacks.History:
+    rng1, rng2 = jax.random.split(jax.random.PRNGKey(seed))
+
+    student = eg.Model(
+        module=student_mod,
+        seed=rng1[0].item(),
+        loss=[
+            eg.losses.MeanSquaredError(),
+            # mlp.BandwidthLoss(),
+            # eg.regularizers.GlobalL2(l=1e-4),
+        ],
+        optimizer=optax.adam(cfg.learning_rate),
+    )
+
+    ds_train = mlp.get_iid_dataset(
+        model=teacher,
+        n_samples=n_train_samples,
+        rng=rng2,
+    )
+
+    return student.fit(
+        inputs=ds_train["xs"],
+        labels=ds_train["ys"],
+        validation_data=(ds_test["xs"], ds_test["ys"]),
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        epochs=cfg.max_epochs,
+        callbacks=[
+            eg.callbacks.EarlyStopping(
+                monitor=cfg.early_stopping_monitor,
+                patience=cfg.early_stopping_patience,
+                mode="min"
+            )
+        ]
+        if cfg.early_stopping
+        else [],
+        verbose=verbose,
+        drop_remaining=False,
+    )
 
 
 def run_experiment(cfg: ExperimentConfig):
@@ -51,12 +110,13 @@ def run_experiment(cfg: ExperimentConfig):
         keys = jax.random.split(jax.random.PRNGKey(n), cfg.trials_per_size)
         for key in keys:
             print(f"Training for {n=}")
-            hist = mlp.train_student(
+            hist = train_student(
                 student_mod=student_mod,
                 teacher=teacher,
                 n_train_samples=n,
                 ds_test=ds_test,
                 seed=key[0],
+                cfg=cfg,
             )
 
             histories[n].append(hist)
@@ -64,10 +124,10 @@ def run_experiment(cfg: ExperimentConfig):
             print(f"train_mse={hist.history['mean_squared_error_loss'][-1]}")
             print(f"val_mse  ={hist.history['val_mean_squared_error_loss'][-1]}")
 
-    utils.mlflow_log_jax(
-        {k: [h.history for h in hs] for k, hs in histories.items()},
-        artifact_name="histories.bin",
-    )
+            utils.mlflow_log_jax(
+                {k: [h.history for h in hs] for k, hs in histories.items()},
+                artifact_name="histories.bin",
+            )
 
 
 def main():

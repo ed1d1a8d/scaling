@@ -1,8 +1,9 @@
+import typing as tp
+
 import elegy as eg
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import optax
 
 
 class MLP(eg.Module):
@@ -60,6 +61,7 @@ def get_model_img(
     model: eg.Model,
     side_samples: int,
 ) -> jnp.ndarray:
+    # TODO: Extend to more than 2 dimensions
     XY = sq_sampling(side_samples)
     assert XY.shape == (side_samples, side_samples, 2)
 
@@ -92,43 +94,32 @@ def get_iid_dataset(
     return dict(xs=xs, ys=ys)
 
 
-def train_student(
-    student_mod: eg.Module,
-    teacher: eg.Model,
-    n_train_samples: int,
-    ds_test: dict[str, jnp.ndarray],
-    learning_rate: float = 3e-4,
-    batch_size: int = 256,
-    max_epochs: int = 512,
-    seed: int = 42,
-    verbose: int = 0,
-) -> eg.callbacks.History:
-    rng1, rng2 = jax.random.split(jax.random.PRNGKey(seed))
+class BandwidthLoss(eg.Loss):
+    def __init__(
+        self,
+        side_samples: int,
+        weight: tp.Optional[float] = None,
+        name: tp.Optional[str] = None,
+    ):
+        """
+        side_samples: Number of samples per side used to compute the DFT.
+            Total number of samples is side_samples ** input_dim.
+        weight: Optional weight contribution for the total loss. Defaults to `1`.
+        name: Optional name for the instance, if not provided lower snake_case version
+            of the name of the class is used instead.
+        """
+        self.side_samples = side_samples
+        self.name = name if name is not None else eg.utils.get_name(self)
+        self.weight = weight if weight is not None else 1.0
 
-    student = eg.Model(
-        module=student_mod,
-        seed=rng1[0].item(),
-        loss=[
-            eg.losses.MeanSquaredError(),
-            # eg.regularizers.GlobalL2(l=1e-4),
-        ],
-        optimizer=optax.adam(learning_rate),
-    )
+    def call(self, states: eg.Model):
+        # Fn arg needs to be named states to conform with elegy API.
+        # We rename it to `model` make things more clear later on.
+        model = states
 
-    ds_train = get_iid_dataset(
-        model=teacher,
-        n_samples=n_train_samples,
-        rng=rng2,
-    )
+        img = get_model_img(
+            model=model,
+            side_samples=self.side_samples,
+        )
 
-    return student.fit(
-        inputs=ds_train["xs"],
-        labels=ds_train["ys"],
-        validation_data=(ds_test["xs"], ds_test["ys"]),
-        batch_size=batch_size,
-        shuffle=True,
-        epochs=max_epochs,
-        callbacks=[eg.callbacks.EarlyStopping(monitor="val_loss", patience=3)],
-        verbose=verbose,
-        drop_remaining=False,
-    )
+        return 0
