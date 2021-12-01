@@ -25,11 +25,12 @@ class ExperimentConfig:
 
     early_stopping: bool = True  # Whether to use early stopping
     early_stopping_patience: int = 16
-    early_stopping_monitor: str = "loss"
+    early_stopping_monitor: str = "val_mean_squared_error_loss"
 
     learning_rate: float = 3e-2
     max_epochs: int = 512
     batch_size: int = 256
+    l2_reg: float = 0
 
 
 def train_student(
@@ -49,7 +50,7 @@ def train_student(
         loss=[
             eg.losses.MeanSquaredError(),
             # mlp.BandwidthLoss(),
-            # eg.regularizers.GlobalL2(l=1e-4),
+            eg.regularizers.L2(l=cfg.l2_reg),
         ],
         optimizer=optax.adam(cfg.learning_rate),
     )
@@ -71,7 +72,7 @@ def train_student(
             eg.callbacks.EarlyStopping(
                 monitor=cfg.early_stopping_monitor,
                 patience=cfg.early_stopping_patience,
-                mode="min"
+                mode="min",
             )
         ]
         if cfg.early_stopping
