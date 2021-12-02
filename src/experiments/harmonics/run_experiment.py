@@ -29,7 +29,7 @@ class ExperimentConfig:
     ds_test_seed: int = -2
 
     train_sizes: tuple[int, ...] = tuple(int(2 ** x) for x in range(19))
-    trials_per_size: int = 4
+    trials_per_size: int = 5
 
     early_stopping: bool = True  # Whether to use early stopping
     early_stopping_patience: int = 32
@@ -132,10 +132,12 @@ def run_experiment(cfg: ExperimentConfig):
 
             train_mse = float(hist.history["mean_squared_error_loss"][-1])
             val_mse = float(hist.history["mean_squared_error_loss"][-1])
-            print(f"train_mse={train_mse}")
-            print(f"val_mse  ={val_mse}")
+            n_epochs = len(hist.history["mean_squared_error_loss"])
+            print(f"train_mse ={train_mse}")
+            print(f"val_mse   ={val_mse}")
+            print(f"n_epochs  ={n_epochs}")
             mlflow.log_metrics(
-                dict(train_mse=train_mse, val_mse=val_mse),
+                dict(train_mse=train_mse, val_mse=val_mse, n_epochs=n_epochs),
                 step=n_idx,
             )
 
