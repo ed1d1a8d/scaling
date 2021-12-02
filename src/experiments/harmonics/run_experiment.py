@@ -11,6 +11,7 @@ import mlflow
 import optax
 import src.models.mlp as mlp
 import src.utils as utils
+from simple_parsing import ArgumentParser
 from src.experiments.harmonics.harmonic_function import HarmonicFunction
 
 
@@ -18,17 +19,16 @@ from src.experiments.harmonics.harmonic_function import HarmonicFunction
 class ExperimentConfig:
     input_dim: int = 2
 
-    # For ground truth harmonic function
-    freq_limit: int = 64
-    num_components: int = 8
+    freq_limit: int = 16  # For ground truth harmonic function
+    num_components: int = 8  # For ground truth harmonic function
 
     # (96, 192, 1) is from https://arxiv.org/pdf/2102.06701.pdf.
     layer_widths: tuple[int, ...] = (96, 192, 1)  # 1024, 42, 5, 1)
 
-    n_test: int = 1024
+    n_test: int = 10000
     ds_test_seed: int = -2
 
-    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 5))  # 23))
+    train_sizes: tuple[int, ...] = tuple(int(2 ** x) for x in range(19))
     trials_per_size: int = 4
 
     early_stopping: bool = True  # Whether to use early stopping
@@ -115,10 +115,10 @@ def run_experiment(cfg: ExperimentConfig):
 
     histories: dict[int, list[eg.callbacks.History]] = defaultdict(list)
 
-    for n in cfg.train_sizes:
+    for n_idx, n in enumerate(cfg.train_sizes):
         keys = jax.random.split(jax.random.PRNGKey(n), cfg.trials_per_size)
-        for key in keys:
-            print(f"Training for {n=}")
+        for trial, key in enumerate(keys):
+            print(f"Training for {n=}, {trial=}")
             hist = train_student(
                 hf=hf,
                 student_mod=student_mod,
@@ -130,8 +130,14 @@ def run_experiment(cfg: ExperimentConfig):
 
             histories[n].append(hist)
 
-            print(f"train_mse={hist.history['mean_squared_error_loss'][-1]}")
-            print(f"val_mse  ={hist.history['val_mean_squared_error_loss'][-1]}")
+            train_mse = float(hist.history["mean_squared_error_loss"][-1])
+            val_mse = float(hist.history["mean_squared_error_loss"][-1])
+            print(f"train_mse={train_mse}")
+            print(f"val_mse  ={val_mse}")
+            mlflow.log_metrics(
+                dict(train_mse=train_mse, val_mse=val_mse),
+                step=n_idx,
+            )
 
             utils.mlflow_log_jax(
                 {k: [h.history for h in hs] for k, hs in histories.items()},
@@ -140,10 +146,15 @@ def run_experiment(cfg: ExperimentConfig):
 
 
 def main():
+    # Parse config
+    parser = ArgumentParser()
+    parser.add_arguments(ExperimentConfig, dest="experiment_config")
+    args = parser.parse_args()
+    cfg: ExperimentConfig = args.experiment_config
+
+    # Initialize mlflow
     utils.mlflow_init()
     mlflow.set_experiment("harmonics")
-
-    cfg = ExperimentConfig()
 
     with mlflow.start_run():
         # Log current script
