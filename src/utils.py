@@ -1,10 +1,11 @@
 import os
 import pathlib
 import tempfile
-from typing import Optional
+from typing import Callable, Optional
 
-import elegy as eg
 import flax.serialization
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import mlflow
 import msgpack
 
@@ -59,12 +60,25 @@ def mlflow_read_jax(
         return msgpack_restore_v2(b)
 
 
-def mlflow_load_model(
-    run_id: str,
-    rel_artifact_path: str,
-):
-    return eg.load(mlflow_abs_path(run_id, rel_artifact_path))
-
-
 def mlflow_init():
     mlflow.set_tracking_uri(os.path.join(REPO_BASE, "mlruns"))
+
+
+def to_2d_image(
+    pred_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    side_samples: int,
+) -> jnp.ndarray:
+    """Should only be called on a pred_fn that takes 2d inputs."""
+    s = slice(0, 1, 1j * side_samples)
+    XY = jnp.mgrid[s, s].T
+    img = pred_fn(XY)
+    return img
+
+
+def viz_2d(
+    pred_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    side_samples: int,
+):
+    """Should only be called on a pred_fn that takes 2d inputs."""
+    img = to_2d_image(pred_fn, side_samples)
+    plt.imshow(img, origin="lower")

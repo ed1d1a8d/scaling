@@ -3,12 +3,10 @@ import pathlib
 import pickle
 from collections import defaultdict
 
-import elegy as eg
-import jax
-import jax.numpy as jnp
+import tensorflow as tf
+import tensorflow.keras as keras
 import matplotlib.pyplot as plt
 import mlflow
-import optax
 import src.models.mlp as mlp
 import src.utils as utils
 from simple_parsing import ArgumentParser
@@ -43,40 +41,37 @@ class ExperimentConfig:
 
 def train_student(
     hf: HarmonicFunction,
-    student_mod: eg.Module,
     n_train_samples: int,
-    ds_test: dict[str, jnp.ndarray],
+    ds_test: dict[str, tf.Tensor],
     cfg: ExperimentConfig,
-    seed: int = 42,
+    rng: tf.random.Generator,
     verbose: int = 0,
-) -> eg.callbacks.History:
-    rng1, rng2 = jax.random.split(jax.random.PRNGKey(seed))
-
-    student = eg.Model(
-        module=student_mod,
-        seed=rng1[0].item(),
-        loss=[
-            eg.losses.MeanSquaredError(),
-            eg.regularizers.L2(l=cfg.l2_reg),
-        ],
-        optimizer=optax.adam(cfg.learning_rate),
+) -> keras.callbacks.History:
+    student = mlp.MLP(
+        input_dim=cfg.input_dim,
+        layer_widths=cfg.layer_widths,
+        seed=rng.make_seeds(1)[0][0].numpy(),
+    )
+    student.compile(
+        optimizer=keras.optimizers.Adam(cfg.learning_rate),
+        loss=keras.losses.MSE(),  # TODO: Add regularization support
     )
 
     ds_train = hf.get_iid_dataset(
         n_samples=n_train_samples,
         batch_size=cfg.batch_size,
-        rng=rng2,
+        seed=rng.make_seeds(1)[0][0].numpy(),
     )
 
     return student.fit(
-        inputs=ds_train["xs"],
-        labels=ds_train["ys"],
+        x=ds_train["xs"],
+        y=ds_train["ys"],
         validation_data=(ds_test["xs"], ds_test["ys"]),
         batch_size=cfg.batch_size,
         shuffle=True,
         epochs=cfg.max_epochs,
         callbacks=[
-            eg.callbacks.EarlyStopping(
+            keras.callbacks.EarlyStopping(
                 monitor=cfg.early_stopping_monitor,
                 patience=cfg.early_stopping_patience,
                 mode="min",
@@ -102,29 +97,24 @@ def run_experiment(cfg: ExperimentConfig):
         plt.cla()
     with open(mlflow.get_artifact_uri("hf.pkl"), "wb") as f:
         pickle.dump(hf, f)
+
     ds_test = hf.get_iid_dataset(
         n_samples=cfg.n_test,
-        rng=jax.random.PRNGKey(-2),
+        seed=-2,
         batch_size=cfg.batch_size,
     )
 
-    student_mod = mlp.MLP(
-        input_dim=cfg.input_dim,
-        layer_widths=cfg.layer_widths,
-    )
-
-    histories: dict[int, list[eg.callbacks.History]] = defaultdict(list)
+    histories: dict[int, list[keras.callbacks.History]] = defaultdict(list)
 
     for n_idx, n in enumerate(cfg.train_sizes):
-        keys = jax.random.split(jax.random.PRNGKey(n), cfg.trials_per_size)
-        for trial, key in enumerate(keys):
+        rngs = tf.random.Generator.from_seed(n).split(count=cfg.trial_per_size)
+        for trial, rng in enumerate(rngs):
             print(f"Training for {n=}, {trial=}")
             hist = train_student(
                 hf=hf,
-                student_mod=student_mod,
                 n_train_samples=n,
                 ds_test=ds_test,
-                seed=key[0],
+                rng=rng,
                 cfg=cfg,
             )
 
@@ -141,10 +131,11 @@ def run_experiment(cfg: ExperimentConfig):
                 step=n_idx,
             )
 
-            utils.mlflow_log_jax(
-                {k: [h.history for h in hs] for k, hs in histories.items()},
-                artifact_name="histories.bin",
-            )
+            with open(mlflow.get_artifact_uri("histories.pkl"), "wb") as f:
+                pickle.dump(
+                    obj={k: [h.history for h in hs] for k, hs in histories.items()},
+                    file=f,
+                )
 
 
 def main():

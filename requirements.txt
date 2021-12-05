@@ -2,9 +2,6 @@
 
 # ML libraries
 # pip install jax[cuda11_cudnn805] -f https://storage.googleapis.com/jax-releases/jax_releases.html
-dm-haiku==0.0.5
-elegy==0.8.1
-flax==0.3.6
 tensorflow==2.7.0
 tensorflow-datasets==4.4.0
 
