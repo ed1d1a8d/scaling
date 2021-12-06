@@ -13,6 +13,11 @@ from simple_parsing import ArgumentParser
 from src.experiments.harmonics.harmonic_function import HarmonicFunction
 
 
+_tf_config = tf.compat.v1.ConfigProto()
+_tf_config.gpu_options.allow_growth = True
+tf.compat.v1.Session(config=_tf_config)
+
+
 @dataclasses.dataclass
 class ExperimentConfig:
     input_dim: int = 2
@@ -30,12 +35,12 @@ class ExperimentConfig:
     trials_per_size: int = 5
 
     early_stopping: bool = True  # Whether to use early stopping
-    early_stopping_patience: int = 32
-    early_stopping_monitor: str = "val_mean_squared_error_loss"
+    early_stopping_patience: int = 16
+    early_stopping_monitor: str = "val_loss"
 
-    learning_rate: float = 3e-4
+    learning_rate: float = 3e-3
     max_epochs: int = 9001
-    batch_size: int = 1024
+    batch_size: int = 256
     l2_reg: float = 0
 
 
@@ -46,7 +51,7 @@ def train_student(
     cfg: ExperimentConfig,
     rng: tf.random.Generator,
     verbose: int = 0,
-) -> keras.callbacks.History:
+) -> tuple[mlp.MLP, keras.callbacks.History]:
     student = mlp.MLP(
         input_dim=cfg.input_dim,
         layer_widths=cfg.layer_widths,
@@ -54,7 +59,7 @@ def train_student(
     )
     student.compile(
         optimizer=keras.optimizers.Adam(cfg.learning_rate),
-        loss=keras.losses.MSE(),  # TODO: Add regularization support
+        loss=keras.losses.MeanSquaredError(),  # TODO: Add regularization support
     )
 
     ds_train = hf.get_iid_dataset(
@@ -63,7 +68,7 @@ def train_student(
         seed=rng.make_seeds(1)[0][0].numpy(),
     )
 
-    return student.fit(
+    hist = student.fit(
         x=ds_train["xs"],
         y=ds_train["ys"],
         validation_data=(ds_test["xs"], ds_test["ys"]),
@@ -80,8 +85,9 @@ def train_student(
         if cfg.early_stopping
         else [],
         verbose=verbose,
-        drop_remaining=False,
     )
+
+    return student, hist
 
 
 def run_experiment(cfg: ExperimentConfig):
@@ -107,10 +113,10 @@ def run_experiment(cfg: ExperimentConfig):
     histories: dict[int, list[keras.callbacks.History]] = defaultdict(list)
 
     for n_idx, n in enumerate(cfg.train_sizes):
-        rngs = tf.random.Generator.from_seed(n).split(count=cfg.trial_per_size)
+        rngs = tf.random.Generator.from_seed(n).split(count=cfg.trials_per_size)
         for trial, rng in enumerate(rngs):
             print(f"Training for {n=}, {trial=}")
-            hist = train_student(
+            student, hist = train_student(
                 hf=hf,
                 n_train_samples=n,
                 ds_test=ds_test,
@@ -120,9 +126,9 @@ def run_experiment(cfg: ExperimentConfig):
 
             histories[n].append(hist)
 
-            train_mse = float(hist.history["mean_squared_error_loss"][-1])
-            val_mse = float(hist.history["mean_squared_error_loss"][-1])
-            n_epochs = len(hist.history["mean_squared_error_loss"])
+            train_mse = float(hist.history["loss"][-1])
+            val_mse = float(hist.history["val_loss"][-1])
+            n_epochs = len(hist.history["loss"])
             print(f"train_mse ={train_mse}")
             print(f"val_mse   ={val_mse}")
             print(f"n_epochs  ={n_epochs}")
@@ -130,6 +136,14 @@ def run_experiment(cfg: ExperimentConfig):
                 dict(train_mse=train_mse, val_mse=val_mse, n_epochs=n_epochs),
                 step=n_idx,
             )
+
+            if student.input_dim == 2:
+                student.viz_2d(side_samples=512)
+                mlflow.log_figure(
+                    figure=plt.gcf(),
+                    artifact_file=f"student-viz/n-{n:09}-trial-{trial:04}.png",
+                )
+                plt.cla()
 
             with open(mlflow.get_artifact_uri("histories.pkl"), "wb") as f:
                 pickle.dump(

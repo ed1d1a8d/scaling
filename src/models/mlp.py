@@ -3,6 +3,7 @@ Implementation of a multilayer perceptron (aka a fully connected net) in tf.
 Also contains useful utilities.
 """
 
+import src.utils as utils
 import tensorflow as tf
 import tensorflow.keras as keras
 
@@ -26,5 +27,14 @@ class MLP(keras.Model):
             + [keras.layers.Dense(layer_widths[-1])]
         )
 
-    def __call__(self, xs: tf.Tensor) -> tf.Tensor:
+    def call(self, xs: tf.Tensor) -> tf.Tensor:
         return self.net(xs)
+
+    def viz_2d(self, side_samples: int):
+        assert self.input_dim == 2
+        utils.viz_2d(
+            lambda xs: self.predict(
+                tf.convert_to_tensor(xs.reshape(-1, 2)),
+            ).reshape(side_samples, side_samples),
+            side_samples=side_samples,
+        )
