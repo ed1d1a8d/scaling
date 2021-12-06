@@ -5,7 +5,7 @@
 
 input_dims=( 2 4 8 )
 freq_limits=( 4 8 16 )
-layer_width_lists=( "96 192 1" "192 384 1" "96 192 1024 1")
+layer_width_lists=( "96 192 1" "192 384 1" "384 768 1")
 for input_dim in "${input_dims[@]}"
 do
 	for freq_limit in "${freq_limits[@]}"
