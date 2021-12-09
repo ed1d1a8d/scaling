@@ -30,5 +30,6 @@ def viz_2d(
     side_samples: int,
 ):
     """Should only be called on a pred_fn that takes 2d inputs."""
-    img = to_2d_image(pred_fn, side_samples)
+    with torch.no_grad():
+        img = to_2d_image(pred_fn, side_samples).numpy()
     plt.imshow(img, origin="lower")

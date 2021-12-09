@@ -35,20 +35,23 @@ class FCNet(pl.LightningModule):
     def training_step(self, batch, *_, **__):
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(input=y_hat, target=y)
-        return loss
+
+        mse = F.mse_loss(input=y_hat, target=y)
+        self.log("train_mse", mse)
+
+        return mse
 
     def validation_step(self, batch, *_, **__):
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(input=y_hat, target=y)
-        self.log("val_mse", loss)
+        mse = F.mse_loss(input=y_hat, target=y)
+        self.log("val_mse", mse)
 
     def test_step(self, batch, *_, **__):
         x, y = batch
         y_hat = self(x)
-        loss = F.mse_loss(input=y_hat, target=y)
-        self.log("test_mse", loss)
+        mse = F.mse_loss(input=y_hat, target=y)
+        self.log("test_mse", mse)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
