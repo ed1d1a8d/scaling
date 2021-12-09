@@ -209,7 +209,7 @@ def run_experiment(cfg: ExperimentConfig):
             )
 
             def _add_log10s(d: dict[str, float]) -> dict[str, float]:
-                return d | {f"log10_{k}": np.log(v + 1e-42) for k, v in d.items()}
+                return d | {f"log10_{k}": np.log10(v + 1e-42) for k, v in d.items()}
 
             print(tr)
             mlflow.log_metrics(
