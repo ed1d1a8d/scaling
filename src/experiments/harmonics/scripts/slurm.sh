@@ -1,6 +1,6 @@
 #!/bin/bash
 # This script should be launched from the root of the repository, i.e.
-# ./src/experiments/harmonics/slurm.sh
+# ./src/experiments/harmonics/scripts/slurm.sh
 #
 # For details on how this script works, see the SLURM guide here:
 # https://supercloud.mit.edu/submitting-jobs.

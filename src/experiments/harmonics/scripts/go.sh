@@ -1,7 +1,7 @@
 #!/bin/bash
 # Highest level experiment script.
 # This script should be launched from the root of the repository, i.e.
-# ./src/experiments/harmonics/go.sh
+# ./src/experiments/harmonics/scripts/go.sh
 
 input_dims=( 2 4 8 )
 freq_limits=( 4 8 16 )
