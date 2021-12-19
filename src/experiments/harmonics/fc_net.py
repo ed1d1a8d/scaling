@@ -13,6 +13,11 @@ class FCNetConfig:
     layer_widths: tuple[int, ...] = (96, 192, 1)
     learning_rate: float = 3e-4
 
+    sched_monitor: str = "val_mse"
+    sched_patience: int = 25
+    sched_decay: float = 0.1
+    sched_min_lr: float = 1e-6
+
 
 class FCNet(pl.LightningModule):
     """A fully connected neural network."""
@@ -28,6 +33,8 @@ class FCNet(pl.LightningModule):
             _layers.append(nn.Linear(w_in, w_out))
 
         self.net = nn.Sequential(*_layers)
+
+        self.save_hyperparameters()
 
     def forward(self, x):
         return torch.squeeze(self.net(x), dim=-1)
@@ -54,8 +61,31 @@ class FCNet(pl.LightningModule):
         self.log("test_mse", mse)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
+        opt = torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
+        sched_config = dict(
+            scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer=opt,
+                mode="min",
+                factor=self.cfg.sched_decay,
+                patience=self.cfg.sched_patience,
+                min_lr=self.cfg.sched_min_lr,
+                verbose=True,
+            ),
+            monitor=self.cfg.sched_monitor,
+        )
 
-    def viz_2d(self, side_samples: int):
-        assert self.cfg.input_dim == 2
-        utils.viz_2d(self.forward, side_samples=side_samples)
+        return [opt], [sched_config]
+
+    def viz_2d(
+        self,
+        side_samples: int,
+        pad: tuple[int, int] = (0, 0),
+        value: float = 0.5,
+    ):
+        assert sum(pad) + 2 == self.cfg.input_dim
+        utils.viz_2d(
+            pred_fn=lambda xs: self.forward(
+                F.pad(input=xs, pad=pad, mode="constant", value=value)
+            ),
+            side_samples=side_samples,
+        )

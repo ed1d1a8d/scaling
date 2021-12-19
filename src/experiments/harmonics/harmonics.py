@@ -104,10 +104,17 @@ class HarmonicFn(pl.LightningModule):
         mse = F.mse_loss(input=y_hat, target=y)
         self.log("test_mse", mse)
 
-    def viz_2d(self, side_samples: int):
-        assert self.cfg.input_dim == 2
+    def viz_2d(
+        self,
+        side_samples: int,
+        pad: tuple[int, int] = (1, 5),
+        value: float = 0.5,
+    ):
+        assert sum(pad) + 2 == self.cfg.input_dim
         utils.viz_2d(
-            self.forward,
+            pred_fn=lambda xs: self.forward(
+                F.pad(input=xs, pad=pad, mode="constant", value=value)
+            ),
             side_samples=side_samples,
         )
 

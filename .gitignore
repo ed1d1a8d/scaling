@@ -4,3 +4,5 @@ __pycache__
 mlruns
 slurm-logs
 lightning_logs
+
+notebooks/archive
