@@ -103,7 +103,7 @@ class CustomMLFlowCallback(pl.Callback):
 
         self.best_val_mse = np.inf
         self.best_epochs: Optional[int] = None
-        self.best_steps: Optional[int] = None
+        self.best_num_dps: Optional[int] = None
 
     def tag_dict(self, **kwargs) -> dict[str, float]:
         # The zzz at the front is to make it go to the end of the mlflow logs.
@@ -206,7 +206,7 @@ def train_student(
         train_mse=_get_mse(dm.train_dataloader(shuffle=False)),
         val_mse=_get_mse(dm.val_dataloader()),
         epochs=cc.best_epochs,
-        steps=cc.best_steps,
+        num_dps=cc.best_num_dps,
     )
 
 
@@ -284,7 +284,7 @@ def main():
 
     # Initialize mlflow
     utils.mlflow_init()
-    mlflow.set_experiment("harmonics-v2")
+    mlflow.set_experiment("harmonics-v3")
 
     with mlflow.start_run():
         # Log current script
