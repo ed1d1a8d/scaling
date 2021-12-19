@@ -6,6 +6,7 @@ from typing import Callable
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
+from PIL import Image
 import torch
 
 REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
@@ -32,6 +33,13 @@ def mlflow_read_pkl(
         "rb",
     ) as f:
         return pickle.load(f)
+
+
+def mlflow_read_img(
+    run_id: str,
+    rel_artifact_path: str,
+) -> Image.Image:
+    return Image.open(mlflow_abs_path(run_id, rel_artifact_path))
 
 
 def to_2d_image(
