@@ -32,7 +32,7 @@ class ExperimentConfig:
     input_dim: int = 4
 
     freq_limit: int = 2  # For ground truth harmonic function
-    num_components: int = 4  # For ground truth harmonic function
+    num_components: int = 16  # For ground truth harmonic function
     true_hf_seed: int = -1
 
     # (96, 192, 1) is from https://arxiv.org/pdf/2102.06701.pdf.
@@ -47,7 +47,13 @@ class ExperimentConfig:
     learning_rate: float = 3e-3
     max_epochs: int = 9001
     batch_size: int = 256
-    l2_reg: float = 0
+
+    high_freq_lambda: float = 1
+    high_freq_bandlimit: int = 2
+    high_freq_mc_samples: int = 512
+
+    # TODO: Implement l2_reg
+    # l2_reg: float = 0
 
     sched_patience: int = 50
     sched_decay: float = 0.1
@@ -115,6 +121,8 @@ class CustomMLFlowCallback(pl.Callback):
         mlflow.log_metrics(
             metrics=self.tag_dict(
                 train_mse=float(trainer.logged_metrics["train_mse"]),
+                train_hfn=float(trainer.logged_metrics["train_hfn"]),
+                train_loss=float(trainer.logged_metrics["train_loss"]),
                 val_mse=float(trainer.logged_metrics["val_mse"]),
             ),
             step=self.n_train * self.train_epochs_completed,
@@ -150,6 +158,9 @@ def train_student(
             input_dim=cfg.input_dim,
             layer_widths=cfg.layer_widths,
             learning_rate=cfg.learning_rate,
+            high_freq_lambda=cfg.high_freq_lambda,
+            high_freq_bandlimit=cfg.high_freq_bandlimit,
+            high_freq_mc_samples=cfg.high_freq_mc_samples,
             sched_monitor=cfg.early_stopping_monitor,
             sched_patience=cfg.sched_patience,
             sched_decay=cfg.sched_decay,
@@ -284,7 +295,7 @@ def main():
 
     # Initialize mlflow
     utils.mlflow_init()
-    mlflow.set_experiment("harmonics-v3")
+    mlflow.set_experiment("harmonics-bw-reg-v1")
 
     with mlflow.start_run():
         # Log current script

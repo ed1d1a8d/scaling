@@ -24,8 +24,8 @@ conda env list
 which python
 
 # Run copies of script
-python -m src.experiments.harmonics.run_experiment --layer_widths 32 32 32 1 $@ &
-python -m src.experiments.harmonics.run_experiment --layer_widths 64 64 64 1 $@ &
+# python -m src.experiments.harmonics.run_experiment --layer_widths 32 32 32 1 $@ &
+# python -m src.experiments.harmonics.run_experiment --layer_widths 64 64 64 1 $@ &
 python -m src.experiments.harmonics.run_experiment --layer_widths 128 128 128 1 $@ &
 
 wait

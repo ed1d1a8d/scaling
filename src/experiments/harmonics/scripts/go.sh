@@ -3,14 +3,9 @@
 # This script should be launched from the root of the repository, i.e.
 # ./src/experiments/harmonics/scripts/go.sh
 
-freq_limits=( 2 3 )
-ncs=( 4 16 )
-for freq_limit in "${freq_limits[@]}"
+high_freq_lambdas=( 0.01 0.1 1 10 100 )
+for high_freq_lambda in "${high_freq_lambdas[@]}"
 do
-  for nc in "${ncs[@]}"
-  do
-      ./src/experiments/harmonics/scripts/slurm.sh \
-                --freq_limit $freq_limit \
-                --num_components $nc
-  done
+  ./src/experiments/harmonics/scripts/slurm.sh \
+            --high_freq_lambda $high_freq_lambda
 done
