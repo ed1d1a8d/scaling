@@ -6,3 +6,4 @@ slurm-logs
 lightning_logs
 
 notebooks/archive
+notebooks/cache
