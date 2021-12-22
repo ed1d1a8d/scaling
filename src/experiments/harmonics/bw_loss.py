@@ -62,3 +62,50 @@ def high_freq_norm_mc(
     #
     # See https://github.com/pytorch/pytorch/issues/27036#issuecomment-743413633
     # for details.
+
+
+def high_freq_norm_dft(
+    fn: Callable[[torch.Tensor], torch.Tensor],
+    input_dim: int,
+    bandlimit: int,
+    side_samples: int,
+    device: Optional[torch.device] = None,
+    debug: bool = False,
+) -> torch.Tensor:
+    """
+    Computes the 2-norm of high frequency fourier components of `fn` using
+    a discrete fourier transform with side_samples per side.
+
+    High frequency is defined as frequencies with L_infty norm above
+    `bandlimit`.
+
+    `fn` is assumed to be periodic over the unit hypercube.
+    """
+    if 2 * bandlimit + 1 >= side_samples:
+        return 0
+
+    grid_xs = torch.Tensor(
+        np.moveaxis(
+            np.mgrid[tuple(slice(0, side_samples) for _ in range(input_dim))],
+            source=0,
+            destination=-1,
+        )
+        / side_samples,
+        device=device,
+    )
+    grid_ys = fn(grid_xs)
+
+    grid_fft = torch.fft.fftn(grid_ys, norm="forward")
+    grid_sfft = torch.fft.fftshift(grid_fft)
+
+    high_freq_coeffs = grid_sfft
+    mid_idx = side_samples // 2
+
+    high_freq_coeffs[
+        tuple(slice(mid_idx, mid_idx + bandlimit + 1) for _ in range(input_dim))
+    ] = 0
+    high_freq_coeffs[
+        tuple(slice(mid_idx - bandlimit, mid_idx + 1) for _ in range(input_dim))
+    ] = 0
+
+    return high_freq_coeffs.norm() ** 2
