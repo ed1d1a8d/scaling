@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 
-def high_freq_norm_mc(
+def high_freq_norm_mcls(
     fn: Callable[[torch.Tensor], torch.Tensor],
     input_dim: int,
     bandlimit: int,
@@ -15,7 +15,7 @@ def high_freq_norm_mc(
 ) -> torch.Tensor:
     """
     Computes the 2-norm of high frequency fourier components of `fn` using
-    Monte-Carlo integration with `n_samples` samples.
+    Monte-Carlo least-squares with `n_samples` samples.
 
     High frequency is defined as frequencies with L_infty norm above
     `bandlimit`.
@@ -91,8 +91,7 @@ def high_freq_norm_dft(
             destination=-1,
         )
         / side_samples,
-        device=device,
-    )
+    ).to(device)
     grid_ys = fn(grid_xs)
 
     grid_fft = torch.fft.fftn(grid_ys, norm="forward")

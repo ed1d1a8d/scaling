@@ -12,7 +12,7 @@ sbatch <<EOT
 
 # Slurm sbatch options
 #SBATCH -o slurm-logs/harmonics/harmonics.log-%j
-#SBATCH -c 32
+#SBATCH -c 16
 #SBATCH --gres=gpu:volta:1
 
 # Load conda environment.
@@ -26,7 +26,7 @@ which python
 # Run copies of script
 # python -m src.experiments.harmonics.run_experiment --layer_widths 32 32 32 1 $@ &
 # python -m src.experiments.harmonics.run_experiment --layer_widths 64 64 64 1 $@ &
-python -m src.experiments.harmonics.run_experiment --layer_widths 128 128 128 1 $@ &
+python -m src.experiments.harmonics.run_experiment $@ &
 
 wait
 EOT

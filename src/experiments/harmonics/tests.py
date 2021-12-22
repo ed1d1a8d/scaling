@@ -7,7 +7,7 @@ import torch
 from src.experiments.harmonics.harmonics import HarmonicFn, HarmonicFnConfig
 
 
-class TestHighFreqNormMC(unittest.TestCase):
+class TestHighFreqNormMCLS(unittest.TestCase):
     def test_harmonic_fn(self):
         with torch.no_grad():
             for freq_limit in [2, 3]:
@@ -22,7 +22,7 @@ class TestHighFreqNormMC(unittest.TestCase):
                 self.assertAlmostEqual(
                     0,
                     float(
-                        bw_loss.high_freq_norm_mc(
+                        bw_loss.high_freq_norm_mcls(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             bandlimit=freq_limit,
@@ -33,7 +33,7 @@ class TestHighFreqNormMC(unittest.TestCase):
                 )
                 self.assertGreater(
                     float(
-                        bw_loss.high_freq_norm_mc(
+                        bw_loss.high_freq_norm_mcls(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             bandlimit=freq_limit - 1,

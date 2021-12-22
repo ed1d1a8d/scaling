@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 
 import pytorch_lightning as pl
 import src.experiments.harmonics.bw_loss as bw_loss
@@ -8,14 +9,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class HFReg(enum.Enum):
+    MCLS = "MCLS"
+    DFT = "DFT"
+
+
 @dataclasses.dataclass(frozen=True)
 class FCNetConfig:
     input_dim: int = 2
     layer_widths: tuple[int, ...] = (96, 192, 1)
 
+    high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 0
     high_freq_bandlimit: int = 0
-    high_freq_mc_samples: int = 256
+    high_freq_mcls_samples: int = 1024
+    high_freq_dft_ss: int = 8
 
     learning_rate: float = 3e-4
     sched_monitor: str = "val_mse"
@@ -50,13 +58,24 @@ class FCNet(pl.LightningModule):
         mse = F.mse_loss(input=y_hat, target=y)
         self.log(f"{log_prefix}mse", mse)
 
-        hfn = bw_loss.high_freq_norm_mc(
-            fn=self.forward,
-            input_dim=self.cfg.input_dim,
-            bandlimit=self.cfg.high_freq_bandlimit,
-            n_samples=self.cfg.high_freq_mc_samples,
-            device=self.device,
-        )
+        if self.cfg.high_freq_reg == HFReg.MCLS:
+            hfn = bw_loss.high_freq_norm_mcls(
+                fn=self.forward,
+                input_dim=self.cfg.input_dim,
+                bandlimit=self.cfg.high_freq_bandlimit,
+                n_samples=self.cfg.high_freq_mcls_samples,
+                device=self.device,
+            )
+        elif self.cfg.high_freq_reg == HFReg.DFT:
+            hfn = bw_loss.high_freq_norm_dft(
+                fn=self.forward,
+                input_dim=self.cfg.input_dim,
+                bandlimit=self.cfg.high_freq_bandlimit,
+                side_samples=self.cfg.high_freq_dft_ss,
+                device=self.device,
+            )
+        else:
+            assert False
         self.log(f"{log_prefix}hfn", hfn)
 
         loss = mse + self.cfg.high_freq_lambda * hfn

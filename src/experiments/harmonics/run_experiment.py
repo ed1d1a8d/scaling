@@ -14,7 +14,7 @@ import src.utils as utils
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
-from src.experiments.harmonics.fc_net import FCNet, FCNetConfig
+from src.experiments.harmonics.fc_net import FCNet, FCNetConfig, HFReg
 from src.experiments.harmonics.harmonics import (
     HarmonicDataModule,
     HarmonicFn,
@@ -36,7 +36,7 @@ class ExperimentConfig:
     true_hf_seed: int = -1
 
     # (96, 192, 1) is from https://arxiv.org/pdf/2102.06701.pdf.
-    layer_widths: tuple[int, ...] = (128, 128, 128, 1)  # 1024, 42, 5, 1)
+    layer_widths: tuple[int, ...] = (128, 128, 128, 1)
 
     n_val: int = 1024
     val_seed: int = -2
@@ -48,9 +48,11 @@ class ExperimentConfig:
     max_epochs: int = 9001
     batch_size: int = 256
 
+    high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 1
     high_freq_bandlimit: int = 2
-    high_freq_mc_samples: int = 512
+    high_freq_mcls_samples: int = 1024
+    high_freq_dft_ss: int = 8
 
     # TODO: Implement l2_reg
     # l2_reg: float = 0
@@ -158,9 +160,11 @@ def train_student(
             input_dim=cfg.input_dim,
             layer_widths=cfg.layer_widths,
             learning_rate=cfg.learning_rate,
+            high_freq_reg=cfg.high_freq_reg,
             high_freq_lambda=cfg.high_freq_lambda,
             high_freq_bandlimit=cfg.high_freq_bandlimit,
-            high_freq_mc_samples=cfg.high_freq_mc_samples,
+            high_freq_mcls_samples=cfg.high_freq_mcls_samples,
+            high_freq_dft_ss=cfg.high_freq_dft_ss,
             sched_monitor=cfg.early_stopping_monitor,
             sched_patience=cfg.sched_patience,
             sched_decay=cfg.sched_decay,
@@ -295,7 +299,7 @@ def main():
 
     # Initialize mlflow
     utils.mlflow_init()
-    mlflow.set_experiment("harmonics-bw-reg-v1")
+    mlflow.set_experiment("harmonics-bw-reg-v2")
 
     with mlflow.start_run():
         # Log current script
