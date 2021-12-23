@@ -4,11 +4,16 @@
 # pip install jax[cuda11_cudnn805] -f https://storage.googleapis.com/jax-releases/jax_releases.html
 # tensorflow==2.7.0
 # tensorflow-datasets==4.4.0
+--find-links https://storage.googleapis.com/jax-releases/jax_releases.html
 --find-links https://download.pytorch.org/whl/cu113/torch_stable.html
 torch==1.10.0+cu113
 torchvision==0.11.1+cu113
 torchaudio==0.10.0+cu113
+jax==0.2.26+cuda11_cudnn805
 pytorch-lightning==1.5.5
+
+neural-tangents==0.3.9
+
 
 # Configuration parsing
 simple_parsing==0.0.17
