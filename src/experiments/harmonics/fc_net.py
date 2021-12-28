@@ -21,7 +21,7 @@ class FCNetConfig:
 
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 0
-    high_freq_bandlimit: int = 0
+    high_freq_freq_limit: int = 0
     high_freq_mcls_samples: int = 1024
     high_freq_dft_ss: int = 8
 
@@ -62,7 +62,7 @@ class FCNet(pl.LightningModule):
             hfn = bw_loss.high_freq_norm_mcls(
                 fn=self.forward,
                 input_dim=self.cfg.input_dim,
-                bandlimit=self.cfg.high_freq_bandlimit,
+                freq_limit=self.cfg.high_freq_freq_limit,
                 n_samples=self.cfg.high_freq_mcls_samples,
                 device=torch.device(self.device),
             )
@@ -70,7 +70,7 @@ class FCNet(pl.LightningModule):
             hfn = bw_loss.high_freq_norm_dft(
                 fn=self.forward,
                 input_dim=self.cfg.input_dim,
-                bandlimit=self.cfg.high_freq_bandlimit,
+                freq_limit=self.cfg.high_freq_freq_limit,
                 side_samples=self.cfg.high_freq_dft_ss,
                 device=torch.device(self.device),
             )

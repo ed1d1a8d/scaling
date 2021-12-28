@@ -123,17 +123,29 @@ class HarmonicFn(pl.LightningModule):
         cls,
         xs: np.ndarray,
         ys: np.ndarray,
-        bandlimit: int,
+        freq_limit: int,
         lamb: float = 1e-4,
         coeff_threshold: float = 1e-6,
     ) -> HarmonicFn:
         assert ys.shape == xs.shape[:1]
         assert len(xs.shape) == 2
-        assert bandlimit >= 0
+        assert freq_limit >= 0
         D = xs.shape[-1]
 
-        freqs = (
-            np.mgrid[tuple(slice(0, bandlimit + 1) for _ in range(D))].reshape(D, -1).T
+        def _include_freq(f: np.ndarray) -> bool:
+            nonzero_coords = f[f != 0]
+            if len(nonzero_coords) == 0:
+                return True
+            return nonzero_coords[0] > 0
+
+        all_freqs = (
+            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
+            .reshape(D, -1)
+            .T
+        )
+        freqs = np.stack(
+            [f for f in all_freqs if _include_freq(f)],
+            axis=0,
         )
         J = len(freqs)
 

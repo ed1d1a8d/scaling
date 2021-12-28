@@ -9,7 +9,7 @@ import torch
 def high_freq_norm_mcls(
     fn: Callable[[torch.Tensor], torch.Tensor],
     input_dim: int,
-    bandlimit: int,
+    freq_limit: int,
     n_samples: int,
     device: Optional[torch.device] = None,
 ) -> torch.Tensor:
@@ -18,11 +18,11 @@ def high_freq_norm_mcls(
     Monte-Carlo least-squares with `n_samples` samples.
 
     High frequency is defined as frequencies with L_infty norm above
-    `bandlimit`.
+    `freq_limit`.
 
     `fn` is assumed to be periodic over the unit hypercube.
     """
-    BASIS_SZ = (2 * bandlimit + 1) ** input_dim
+    BASIS_SZ = (2 * freq_limit + 1) ** input_dim
     if n_samples <= BASIS_SZ:
         return torch.tensor(0)
 
@@ -30,7 +30,7 @@ def high_freq_norm_mcls(
     ys = fn(xs)
 
     all_freqs = (
-        np.mgrid[tuple(slice(-bandlimit, bandlimit + 1) for _ in range(input_dim))]
+        np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(input_dim))]
         .reshape(input_dim, -1)
         .T
     )
@@ -81,7 +81,7 @@ def high_freq_norm_mcls(
 def high_freq_norm_dft(
     fn: Callable[[torch.Tensor], torch.Tensor],
     input_dim: int,
-    bandlimit: int,
+    freq_limit: int,
     side_samples: int,
     device: Optional[torch.device] = None,
     debug: bool = False,
@@ -91,11 +91,11 @@ def high_freq_norm_dft(
     a discrete fourier transform with side_samples per side.
 
     High frequency is defined as frequencies with L_infty norm above
-    `bandlimit`.
+    `freq_limit`.
 
     `fn` is assumed to be periodic over the unit hypercube.
     """
-    if 2 * bandlimit + 1 >= side_samples:
+    if 2 * freq_limit + 1 >= side_samples:
         return torch.tensor(0)
 
     grid_xs = torch.Tensor(
@@ -116,7 +116,7 @@ def high_freq_norm_dft(
 
     high_freq_coeffs[
         tuple(
-            slice(mid_idx - bandlimit, mid_idx + bandlimit + 1)
+            slice(mid_idx - freq_limit, mid_idx + freq_limit + 1)
             for _ in range(input_dim)
         )
     ] = 0

@@ -22,9 +22,9 @@ from src.experiments.harmonics.harmonics import (
 )
 from torch.utils.data.dataloader import DataLoader
 
+logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -50,7 +50,7 @@ class ExperimentConfig:
 
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 1
-    high_freq_bandlimit: int = 2
+    high_freq_freq_limit: int = 2
     high_freq_mcls_samples: int = 1024
     high_freq_dft_ss: int = 8
 
@@ -162,7 +162,7 @@ def train_student(
             learning_rate=cfg.learning_rate,
             high_freq_reg=cfg.high_freq_reg,
             high_freq_lambda=cfg.high_freq_lambda,
-            high_freq_bandlimit=cfg.high_freq_bandlimit,
+            high_freq_freq_limit=cfg.high_freq_freq_limit,
             high_freq_mcls_samples=cfg.high_freq_mcls_samples,
             high_freq_dft_ss=cfg.high_freq_dft_ss,
             sched_monitor=cfg.early_stopping_monitor,

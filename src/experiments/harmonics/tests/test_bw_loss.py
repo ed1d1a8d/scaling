@@ -23,7 +23,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                         bw_loss.high_freq_norm_mcls(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
-                            bandlimit=freq_limit,
+                            freq_limit=freq_limit,
                             n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
@@ -34,7 +34,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                         bw_loss.high_freq_norm_mcls(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
-                            bandlimit=freq_limit - 1,
+                            freq_limit=freq_limit - 1,
                             n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
@@ -61,7 +61,7 @@ class TestHighFreqNormDFT(unittest.TestCase):
                         bw_loss.high_freq_norm_dft(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
-                            bandlimit=2 * freq_limit + 2,
+                            freq_limit=2 * freq_limit + 2,
                             side_samples=6,
                             device=hf.device,
                         )
@@ -72,7 +72,7 @@ class TestHighFreqNormDFT(unittest.TestCase):
                         bw_loss.high_freq_norm_dft(
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
-                            bandlimit=freq_limit - 1,
+                            freq_limit=freq_limit - 1,
                             side_samples=2 * freq_limit + 2,
                             device=hf.device,
                         )
