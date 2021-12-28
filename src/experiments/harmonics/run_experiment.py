@@ -4,7 +4,6 @@ import pathlib
 import pickle
 import tempfile
 import warnings
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -14,12 +13,9 @@ import src.utils as utils
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
+from src.experiments.harmonics.data import HypercubeDataModule
 from src.experiments.harmonics.fc_net import FCNet, FCNetConfig, HFReg
-from src.experiments.harmonics.harmonics import (
-    HarmonicDataModule,
-    HarmonicFn,
-    HarmonicFnConfig,
-)
+from src.experiments.harmonics.harmonics import HarmonicFn, HarmonicFnConfig
 from torch.utils.data.dataloader import DataLoader
 
 logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
@@ -171,8 +167,9 @@ def train_student(
             sched_min_lr=cfg.sched_min_lr,
         )
     )
-    dm = HarmonicDataModule(
-        hf=hf,
+    dm = HypercubeDataModule(
+        fn=hf,
+        input_dim=hf.cfg.input_dim,
         n_train=n_train,
         n_val=cfg.n_val,
         train_seed=n_train,

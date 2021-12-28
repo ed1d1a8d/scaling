@@ -4,11 +4,8 @@ import warnings
 
 import pytorch_lightning as pl
 import torch
-from src.experiments.harmonics.harmonics import (
-    HarmonicDataModule,
-    HarmonicFn,
-    HarmonicFnConfig,
-)
+from src.experiments.harmonics.data import HypercubeDataModule
+from src.experiments.harmonics.harmonics import HarmonicFn, HarmonicFnConfig
 
 
 class TestHarmonicFn(unittest.TestCase):
@@ -41,8 +38,9 @@ class TestHarmonicFn(unittest.TestCase):
         )[0]["test_mse"]
 
     def test_construct_via_lstsq(self):
-        dm = HarmonicDataModule(
-            hf=self.hf,
+        dm = HypercubeDataModule(
+            fn=self.hf,
+            input_dim=self.hf.cfg.input_dim,
             n_train=2 * (2 * self.hf.cfg.freq_limit + 1) ** self.hf.cfg.input_dim,
             n_val=1024,
             train_seed=-1,

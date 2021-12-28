@@ -81,18 +81,18 @@ class ChebPoly(pl.LightningModule):
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         assert x.shape[-1] == self.cfg.input_dim
 
-        poly1d_ys = torch.ones((self.cfg.deg_limit + 1,) + x.shape)
+        cheb1d_ys = torch.ones((self.cfg.deg_limit + 1,) + x.shape)
         if self.cfg.deg_limit >= 1:
-            poly1d_ys[1] = 2 * x - 1
+            cheb1d_ys[1] = 2 * x - 1
         for i in range(2, self.cfg.deg_limit + 1):
-            poly1d_ys[i] = 2 * (2 * x - 1) * poly1d_ys[i - 1] - poly1d_ys[i - 2]
+            cheb1d_ys[i] = 2 * (2 * x - 1) * cheb1d_ys[i - 1] - cheb1d_ys[i - 2]
 
         if self.cfg.simple_forward:
             basis_ys = []
             for deg in self.degs:
                 cur_ys = torch.ones(x.shape[:-1])
                 for i, di in enumerate(deg):
-                    cur_ys *= poly1d_ys[di, ..., i]
+                    cur_ys *= cheb1d_ys[di, ..., i]
                 basis_ys.append(cur_ys)
 
             return opt_einsum.contract(
@@ -101,13 +101,13 @@ class ChebPoly(pl.LightningModule):
                 torch.stack(basis_ys, dim=0),
             )
 
-        poly1d_ys_degs = poly1d_ys[self.degs]
-        assert poly1d_ys_degs.shape[0] == self.cfg.num_components
-        assert poly1d_ys_degs.shape[1] == self.cfg.input_dim
-        assert poly1d_ys_degs.shape[-1] == self.cfg.input_dim
+        cheb1d_ys_degs = cheb1d_ys[self.degs]
+        assert cheb1d_ys_degs.shape[0] == self.cfg.num_components
+        assert cheb1d_ys_degs.shape[1] == self.cfg.input_dim
+        assert cheb1d_ys_degs.shape[-1] == self.cfg.input_dim
 
         basis_ys = einops.reduce(
-            opt_einsum.contract("ij...j->ij...", poly1d_ys_degs),
+            opt_einsum.contract("ij...j->ij...", cheb1d_ys_degs),
             "basis_idx d ... -> basis_idx ...",
             reduction="prod",
         )
@@ -143,4 +143,89 @@ class ChebPoly(pl.LightningModule):
         freq_limit: int,
         hf_lambda: float,
     ) -> ChebPoly:
-        pass
+        assert len(xs.shape) == 2
+        assert ys.shape == xs.shape[:1]
+        assert deg_limit >= 0
+        assert freq_limit >= 0
+        assert hf_lambda >= 0
+        N, D = xs.shape
+
+        ################################
+        # Compute cheb_Phi
+        ################################
+
+        cheb1d_ys = np.ones((deg_limit + 1,) + xs.shape)
+        if deg_limit >= 1:
+            cheb1d_ys[1] = 2 * xs - 1
+        for i in range(2, deg_limit + 1):
+            cheb1d_ys[i] = 2 * (2 * xs - 1) * cheb1d_ys[i - 1] - cheb1d_ys[i - 2]
+
+        degs = (
+            np.mgrid[tuple(slice(0, deg_limit + 1) for _ in range(D))].reshape(D, -1).T
+        )
+        cheb_J = len(degs)
+
+        cheb1d_ys_degs = cheb1d_ys[degs]
+        assert cheb1d_ys_degs.shape == (cheb_J, D, N, D)
+        cheb_Phi = einops.reduce(
+            opt_einsum.contract("ij...j->ij...", cheb1d_ys_degs),
+            "basis_idx d ... -> basis_idx ...",
+            reduction="prod",
+        ).T
+        assert cheb_Phi.shape == (N, cheb_J)
+
+        ################################
+        # Compute fourier_Phi
+        ################################
+
+        def _include_freq(f: np.ndarray) -> bool:
+            nonzero_coords = f[f != 0]
+            if len(nonzero_coords) == 0:
+                return True
+            return nonzero_coords[0] > 0
+
+        all_freqs = (
+            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
+            .reshape(D, -1)
+            .T
+        )
+        freqs = np.stack(
+            [f for f in all_freqs if _include_freq(f)],
+            axis=0,
+        )
+
+        fourier_Phi = np.concatenate(
+            (
+                np.cos(2 * np.pi * xs @ freqs.T),
+                np.sin(2 * np.pi * xs @ freqs.T)[:, 1:],
+            ),
+            axis=-1,
+        )
+
+        # Orthonormalize basis
+        # Not necessary, just makes things more numerically stable?
+        fourier_Phi[:, 1:] *= np.sqrt(2)
+        assert fourier_Phi.shape[0] == N
+        assert len(fourier_Phi.shape) == 2
+
+        ################################
+        # Compute cheb_coeffs
+        ################################
+
+        # all_coeffs = np.linalg.lstsq(a=Phi, b=ys, rcond=None)[0]
+        # See https://stackoverflow.com/a/34171374/1337463
+        Q = fourier_Phi @ np.linalg.pinv(fourier_Phi) - np.eye(N)
+        all_coeffs = np.linalg.solve(
+            a=cheb_Phi.T @ (np.eye(N) + hf_lambda * Q.T @ Q) @ cheb_Phi,
+            b=cheb_Phi.T @ ys,
+        )
+
+        return cls(
+            cfg=ChebPolyConfig(
+                input_dim=D,
+                deg_limit=deg_limit,
+                num_components=len(all_coeffs),
+            ),
+            coeffs=torch.Tensor(all_coeffs),
+            degs=torch.Tensor(degs),
+        )
