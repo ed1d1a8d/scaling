@@ -89,7 +89,7 @@ class HarmonicFn(pl.LightningModule):
         )
         assert self.phases.shape == (cfg.num_components,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         assert x.shape[-1] == self.cfg.input_dim
 
         # Could also do exp

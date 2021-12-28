@@ -7,3 +7,5 @@ lightning_logs
 
 notebooks/archive
 notebooks/cache
+
+.mypy_cache

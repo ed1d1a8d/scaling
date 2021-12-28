@@ -110,8 +110,8 @@ class CustomMLFlowCallback(pl.Callback):
         self.train_epochs_completed = 0
 
         self.best_val_mse = np.inf
-        self.best_epochs: Optional[int] = None
-        self.best_num_dps: Optional[int] = None
+        self.best_epochs: int = -1
+        self.best_num_dps: int = -1
 
     def tag_dict(self, **kwargs) -> dict[str, float]:
         # The zzz at the front is to make it go to the end of the mlflow logs.

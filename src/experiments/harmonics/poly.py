@@ -78,7 +78,7 @@ class ChebPoly(pl.LightningModule):
         assert self.degs.shape == (cfg.num_components, cfg.input_dim)
         assert self.degs.max() <= cfg.deg_limit
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         assert x.shape[-1] == self.cfg.input_dim
 
         poly1d_ys = torch.ones((self.cfg.deg_limit + 1,) + x.shape)
@@ -143,4 +143,4 @@ class ChebPoly(pl.LightningModule):
         freq_limit: int,
         hf_lambda: float,
     ) -> ChebPoly:
-        raise NotImplementedError
+        pass

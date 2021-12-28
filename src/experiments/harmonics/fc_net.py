@@ -40,7 +40,7 @@ class FCNet(pl.LightningModule):
         self.cfg = cfg
         assert self.cfg.layer_widths[-1] == 1
 
-        _layers = [nn.Linear(cfg.input_dim, cfg.layer_widths[0])]
+        _layers: list[nn.Module] = [nn.Linear(cfg.input_dim, cfg.layer_widths[0])]
         for w_in, w_out in zip(cfg.layer_widths, cfg.layer_widths[1:]):
             _layers.append(nn.ReLU())
             _layers.append(nn.Linear(w_in, w_out))
@@ -49,7 +49,7 @@ class FCNet(pl.LightningModule):
 
         self.save_hyperparameters()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         return torch.squeeze(self.net(x), dim=-1)
 
     def _step_helper(self, batch, log_prefix: str) -> torch.Tensor:
@@ -64,7 +64,7 @@ class FCNet(pl.LightningModule):
                 input_dim=self.cfg.input_dim,
                 bandlimit=self.cfg.high_freq_bandlimit,
                 n_samples=self.cfg.high_freq_mcls_samples,
-                device=self.device,
+                device=torch.device(self.device),
             )
         elif self.cfg.high_freq_reg == HFReg.DFT:
             hfn = bw_loss.high_freq_norm_dft(
@@ -72,7 +72,7 @@ class FCNet(pl.LightningModule):
                 input_dim=self.cfg.input_dim,
                 bandlimit=self.cfg.high_freq_bandlimit,
                 side_samples=self.cfg.high_freq_dft_ss,
-                device=self.device,
+                device=torch.device(self.device),
             )
         else:
             assert False

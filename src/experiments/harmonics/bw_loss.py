@@ -24,7 +24,7 @@ def high_freq_norm_mcls(
     """
     BASIS_SZ = (2 * bandlimit + 1) ** input_dim
     if n_samples <= BASIS_SZ:
-        return 0
+        return torch.tensor(0)
 
     xs = torch.rand((n_samples, input_dim), device=device)
     ys = fn(xs)
@@ -53,9 +53,9 @@ def high_freq_norm_mcls(
             torch.cos(2 * np.pi * basis_freqs @ xs.T),
             torch.sin(2 * np.pi * basis_freqs @ xs.T)[1:],
         ),
-        axis=0,
+        dim=0,
     )
-    basis_ys /= torch.sqrt((basis_ys * basis_ys).mean(axis=-1, keepdim=True))
+    basis_ys /= torch.sqrt((basis_ys * basis_ys).mean(dim=-1, keepdim=True))
     assert basis_ys.shape == (BASIS_SZ, n_samples)
 
     residuals = basis_ys.T @ (torch.pinverse(basis_ys.T) @ ys) - ys
@@ -96,7 +96,7 @@ def high_freq_norm_dft(
     `fn` is assumed to be periodic over the unit hypercube.
     """
     if 2 * bandlimit + 1 >= side_samples:
-        return 0
+        return torch.tensor(0)
 
     grid_xs = torch.Tensor(
         np.moveaxis(
