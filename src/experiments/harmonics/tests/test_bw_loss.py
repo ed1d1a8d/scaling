@@ -1,5 +1,3 @@
-"""Tests for harmonics."""
-
 import unittest
 
 import src.experiments.harmonics.bw_loss as bw_loss
