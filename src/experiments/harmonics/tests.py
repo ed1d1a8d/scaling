@@ -26,7 +26,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             bandlimit=freq_limit,
-                            n_samples=4 * (freq_limit + 1) ** hf.cfg.input_dim,
+                            n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
                     ),
@@ -37,7 +37,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             bandlimit=freq_limit - 1,
-                            n_samples=4 * freq_limit ** hf.cfg.input_dim,
+                            n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
                     ),

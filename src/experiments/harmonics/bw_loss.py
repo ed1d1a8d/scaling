@@ -22,18 +22,32 @@ def high_freq_norm_mcls(
 
     `fn` is assumed to be periodic over the unit hypercube.
     """
-    BASIS_SZ = 2 * ((bandlimit + 1) ** input_dim) - 1
+    BASIS_SZ = (2 * bandlimit + 1) ** input_dim
     if n_samples <= BASIS_SZ:
         return 0
 
     xs = torch.rand((n_samples, input_dim), device=device)
     ys = fn(xs)
 
-    basis_freqs = torch.Tensor(
-        np.mgrid[tuple(slice(0, bandlimit + 1) for _ in range(input_dim))]
+    all_freqs = (
+        np.mgrid[tuple(slice(-bandlimit, bandlimit + 1) for _ in range(input_dim))]
         .reshape(input_dim, -1)
         .T
+    )
+
+    def _include_freq(f: np.ndarray) -> bool:
+        nonzero_coords = f[f != 0]
+        if len(nonzero_coords) == 0:
+            return True
+        return nonzero_coords[0] > 0
+
+    basis_freqs = torch.Tensor(
+        np.stack(
+            [f for f in all_freqs if _include_freq(f)],
+            axis=0,
+        )
     ).to(device)
+
     basis_ys: torch.Tensor = torch.concat(
         (
             torch.cos(2 * np.pi * basis_freqs @ xs.T),
@@ -101,10 +115,10 @@ def high_freq_norm_dft(
     mid_idx = side_samples // 2
 
     high_freq_coeffs[
-        tuple(slice(mid_idx, mid_idx + bandlimit + 1) for _ in range(input_dim))
-    ] = 0
-    high_freq_coeffs[
-        tuple(slice(mid_idx - bandlimit, mid_idx + 1) for _ in range(input_dim))
+        tuple(
+            slice(mid_idx - bandlimit, mid_idx + bandlimit + 1)
+            for _ in range(input_dim)
+        )
     ] = 0
 
     return high_freq_coeffs.norm() ** 2

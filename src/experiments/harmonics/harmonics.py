@@ -65,7 +65,7 @@ class HarmonicFn(pl.LightningModule):
         self.freqs = nn.Parameter(
             torch.randint(
                 size=(cfg.num_components, cfg.input_dim),
-                low=0,
+                low=-cfg.freq_limit,
                 high=cfg.freq_limit + 1,
                 generator=rng,
             ).float()
