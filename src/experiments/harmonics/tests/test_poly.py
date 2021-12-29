@@ -45,7 +45,11 @@ class TestPoly(unittest.TestCase):
         self.assertTrue(torch.allclose(ys, simple_poly.forward(xs)))
 
     def test_viz(self):
-        self.poly.viz_2d(side_samples=512, pad=(self.poly.cfg.input_dim - 3, 1))
+        img = self.poly.viz_2d(
+            side_samples=512,
+            pad=(self.poly.cfg.input_dim - 3, 1),
+        )
+        self.assertEqual(img.shape, (512, 512))
 
     def _get_mse(
         self,

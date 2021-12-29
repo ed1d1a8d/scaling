@@ -1,6 +1,7 @@
 import dataclasses
 import enum
 
+import numpy as np
 import pytorch_lightning as pl
 import src.experiments.harmonics.bw_loss as bw_loss
 import src.utils as utils
@@ -113,9 +114,9 @@ class FCNet(pl.LightningModule):
         side_samples: int,
         pad: tuple[int, int] = (0, 0),
         value: float = 0.5,
-    ):
+    ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        utils.viz_2d(
+        return utils.viz_2d(
             pred_fn=lambda xs: self.forward(
                 F.pad(input=xs, pad=pad, mode="constant", value=value)
             ),

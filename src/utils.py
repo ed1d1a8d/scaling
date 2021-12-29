@@ -56,8 +56,9 @@ def to_2d_image(
 def viz_2d(
     pred_fn: Callable[[torch.Tensor], torch.Tensor],
     side_samples: int,
-):
+) -> np.ndarray:
     """Should only be called on a pred_fn that takes 2d inputs."""
     with torch.no_grad():
         img = to_2d_image(pred_fn, side_samples).numpy()
     plt.imshow(img, origin="lower")
+    return img

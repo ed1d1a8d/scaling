@@ -4,8 +4,8 @@ import dataclasses
 from typing import Optional
 
 import einops
-import opt_einsum
 import numpy as np
+import opt_einsum
 import pytorch_lightning as pl
 import src.utils as utils
 import torch
@@ -125,9 +125,9 @@ class ChebPoly(pl.LightningModule):
         side_samples: int,
         pad: tuple[int, int] = (1, 5),
         value: float = 0.5,
-    ):
+    ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        utils.viz_2d(
+        return utils.viz_2d(
             pred_fn=lambda xs: self.forward(
                 F.pad(input=xs, pad=pad, mode="constant", value=value)
             ),
@@ -212,20 +212,34 @@ class ChebPoly(pl.LightningModule):
         # Compute cheb_coeffs
         ################################
 
+
         # all_coeffs = np.linalg.lstsq(a=Phi, b=ys, rcond=None)[0]
         # See https://stackoverflow.com/a/34171374/1337463
         Q = fourier_Phi @ np.linalg.pinv(fourier_Phi) - np.eye(N)
-        all_coeffs = np.linalg.solve(
+        # cheb_coeffs = np.linalg.solve(
+        #    a=cheb_Phi.T @ (np.eye(N) + hf_lambda * Q.T @ Q) @ cheb_Phi,
+        #    b=cheb_Phi.T @ ys,
+        # )
+        cheb_coeffs = np.linalg.lstsq(
             a=cheb_Phi.T @ (np.eye(N) + hf_lambda * Q.T @ Q) @ cheb_Phi,
             b=cheb_Phi.T @ ys,
-        )
+            rcond=None,
+        )[0]
+
+        # from IPython.core.debugger import Pdb; Pdb().set_trace()
+        # cheb_coeffs = (
+        #     np.linalg.pinv(
+        #         (np.eye(N) - fourier_Phi @ np.linalg.pinv(fourier_Phi)) @ cheb_Phi
+        #     )
+        #     @ ys
+        # )
 
         return cls(
             cfg=ChebPolyConfig(
                 input_dim=D,
                 deg_limit=deg_limit,
-                num_components=len(all_coeffs),
+                num_components=len(cheb_coeffs),
             ),
-            coeffs=torch.Tensor(all_coeffs),
+            coeffs=torch.Tensor(cheb_coeffs),
             degs=torch.Tensor(degs),
         )

@@ -10,7 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.random
-from torch.utils.data import DataLoader, TensorDataset
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,9 +108,9 @@ class HarmonicFn(pl.LightningModule):
         side_samples: int,
         pad: tuple[int, int] = (1, 5),
         value: float = 0.5,
-    ):
+    ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        utils.viz_2d(
+        return utils.viz_2d(
             pred_fn=lambda xs: self.forward(
                 F.pad(input=xs, pad=pad, mode="constant", value=value)
             ),
