@@ -12,6 +12,7 @@ torchaudio==0.10.0+cu113
 
 einops==0.3.2
 pytorch-lightning==1.5.5
+torchtyping==0.1.4
 
 jax==0.2.26+cuda11_cudnn805
 neural-tangents==0.3.9
