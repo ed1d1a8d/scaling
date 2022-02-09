@@ -102,7 +102,7 @@ class TestPoly(unittest.TestCase):
             ys=dm.train_ds.tensors[1].numpy(),
             deg_limit=self.poly.cfg.deg_limit,
             freq_limit=1,
-            hf_lambda=10,
+            hf_lambda=100,
         )
         self.assertGreater(
             self._get_mse(hf_hat_bad_2, dm.val_dataloader()),

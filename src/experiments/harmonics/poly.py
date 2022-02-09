@@ -12,6 +12,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.random
+from src.experiments.harmonics.harmonics import HarmonicFn
+from torchtyping import TensorType as T
+from torchtyping import patch_typeguard
+from typeguard import typechecked
+
+patch_typeguard()  # use before @typechecked
 
 
 @dataclasses.dataclass(frozen=True)
@@ -26,6 +32,7 @@ class ChebPolyConfig:
     simple_forward: bool = False
 
 
+@typechecked
 class ChebPoly(pl.LightningModule):
     """
     Represents a multivariate polynomial over [0, 1]^d that is a
@@ -78,41 +85,50 @@ class ChebPoly(pl.LightningModule):
         assert self.degs.shape == (cfg.num_components, cfg.input_dim)
         assert self.degs.max() <= cfg.deg_limit
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
-        assert x.shape[-1] == self.cfg.input_dim
+    @staticmethod
+    def cheb_basis(
+        x: T["batch":..., "D"],  # type: ignore
+        degs: T["basis_size", "D", int],  # type: ignore
+        simple_mode: bool = False,
+    ) -> T["batch":..., "basis_size"]:  # type: ignore
+        deg_limit: int = degs.max().item() + 1
 
-        cheb1d_ys = torch.ones((self.cfg.deg_limit + 1,) + x.shape)
-        if self.cfg.deg_limit >= 1:
+        cheb1d_ys = torch.ones((deg_limit + 1,) + x.shape)
+        if deg_limit >= 1:
             cheb1d_ys[1] = 2 * x - 1
-        for i in range(2, self.cfg.deg_limit + 1):
+        for i in range(2, deg_limit + 1):
             cheb1d_ys[i] = 2 * (2 * x - 1) * cheb1d_ys[i - 1] - cheb1d_ys[i - 2]
 
-        if self.cfg.simple_forward:
+        if simple_mode:
             basis_ys = []
-            for deg in self.degs:
+            for deg in degs:
                 cur_ys = torch.ones(x.shape[:-1])
                 for i, di in enumerate(deg):
                     cur_ys *= cheb1d_ys[di, ..., i]
                 basis_ys.append(cur_ys)
 
-            return opt_einsum.contract(
-                "i, i... -> ...",
-                self.coeffs,
-                torch.stack(basis_ys, dim=0),
-            )
+            return torch.stack(basis_ys, dim=-1)
 
-        cheb1d_ys_degs = cheb1d_ys[self.degs]
-        assert cheb1d_ys_degs.shape[0] == self.cfg.num_components
-        assert cheb1d_ys_degs.shape[1] == self.cfg.input_dim
-        assert cheb1d_ys_degs.shape[-1] == self.cfg.input_dim
+        cheb1d_ys_degs = cheb1d_ys[degs]
+        assert cheb1d_ys_degs.shape[: degs.ndim] == degs.shape
+        assert cheb1d_ys_degs.shape[degs.ndim :] == cheb1d_ys.shape[1:]
 
-        basis_ys = einops.reduce(
+        return einops.reduce(
             opt_einsum.contract("ij...j->ij...", cheb1d_ys_degs),
-            "basis_idx d ... -> basis_idx ...",
+            "basis_idx input_dim ... -> ... basis_idx",
             reduction="prod",
         )
 
-        return opt_einsum.contract("i, i... -> ...", self.coeffs, basis_ys)
+    def forward(self, x: T["batch":..., "input_dim"]) -> T["batch":...]:  # type: ignore
+        assert x.shape[-1] == self.cfg.input_dim
+
+        basis_ys: T["batch":..., "basis_size"] = self.cheb_basis(
+            x=x,
+            degs=self.degs,
+            simple_mode=self.cfg.simple_forward,
+        )
+
+        return opt_einsum.contract("i, ...i -> ...", self.coeffs, basis_ys)
 
     def test_step(self, batch, *_, **__):
         x, y = batch
@@ -142,7 +158,11 @@ class ChebPoly(pl.LightningModule):
         deg_limit: int,
         freq_limit: int,
         hf_lambda: float,
+        n_reg_samples: int = 512,
     ) -> ChebPoly:
+        """
+        xs are assumed to lie in [0, 1].
+        """
         assert len(xs.shape) == 2
         assert ys.shape == xs.shape[:1]
         assert deg_limit >= 0
@@ -154,85 +174,45 @@ class ChebPoly(pl.LightningModule):
         # Compute cheb_Phi
         ################################
 
-        cheb1d_ys = np.ones((deg_limit + 1,) + xs.shape)
-        if deg_limit >= 1:
-            cheb1d_ys[1] = 2 * xs - 1
-        for i in range(2, deg_limit + 1):
-            cheb1d_ys[i] = 2 * (2 * xs - 1) * cheb1d_ys[i - 1] - cheb1d_ys[i - 2]
-
-        degs = (
+        cheb_degs = (
             np.mgrid[tuple(slice(0, deg_limit + 1) for _ in range(D))].reshape(D, -1).T
         )
-        cheb_J = len(degs)
-
-        cheb1d_ys_degs = cheb1d_ys[degs]
-        assert cheb1d_ys_degs.shape == (cheb_J, D, N, D)
-        cheb_Phi = einops.reduce(
-            opt_einsum.contract("ij...j->ij...", cheb1d_ys_degs),
-            "basis_idx d ... -> basis_idx ...",
-            reduction="prod",
-        ).T
-        assert cheb_Phi.shape == (N, cheb_J)
+        with torch.no_grad():
+            cheb_Phi = cls.cheb_basis(
+                x=torch.tensor(xs),
+                degs=torch.tensor(cheb_degs, dtype=torch.long),
+            ).numpy()
 
         ################################
-        # Compute fourier_Phi
+        # Compute fourier_reg_Phi and cheb_reg_Phi
         ################################
 
-        def _include_freq(f: np.ndarray) -> bool:
-            nonzero_coords = f[f != 0]
-            if len(nonzero_coords) == 0:
-                return True
-            return nonzero_coords[0] > 0
+        xs_reg = np.random.uniform(low=0, high=1, size=(n_reg_samples, D))
+        with torch.no_grad():
+            fourier_reg_Phi = HarmonicFn.harmonic_basis(
+                x=torch.tensor(xs_reg),
+                freq_limit=freq_limit,
+            )[0].numpy()
+            assert fourier_reg_Phi.shape[0] == n_reg_samples
+            assert len(fourier_reg_Phi.shape) == 2
 
-        all_freqs = (
-            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
-            .reshape(D, -1)
-            .T
-        )
-        freqs = np.stack(
-            [f for f in all_freqs if _include_freq(f)],
-            axis=0,
-        )
-
-        fourier_Phi = np.concatenate(
-            (
-                np.cos(2 * np.pi * xs @ freqs.T),
-                np.sin(2 * np.pi * xs @ freqs.T)[:, 1:],
-            ),
-            axis=-1,
-        )
-
-        # Orthonormalize basis
-        # Not necessary, just makes things more numerically stable?
-        fourier_Phi[:, 1:] *= np.sqrt(2)
-        assert fourier_Phi.shape[0] == N
-        assert len(fourier_Phi.shape) == 2
+            cheb_reg_Phi = cls.cheb_basis(
+                x=torch.tensor(xs_reg),
+                degs=torch.tensor(cheb_degs, dtype=torch.long),
+            ).numpy()
 
         ################################
         # Compute cheb_coeffs
         ################################
 
-
-        # all_coeffs = np.linalg.lstsq(a=Phi, b=ys, rcond=None)[0]
-        # See https://stackoverflow.com/a/34171374/1337463
-        Q = fourier_Phi @ np.linalg.pinv(fourier_Phi) - np.eye(N)
-        # cheb_coeffs = np.linalg.solve(
-        #    a=cheb_Phi.T @ (np.eye(N) + hf_lambda * Q.T @ Q) @ cheb_Phi,
-        #    b=cheb_Phi.T @ ys,
-        # )
-        cheb_coeffs = np.linalg.lstsq(
-            a=cheb_Phi.T @ (np.eye(N) + hf_lambda * Q.T @ Q) @ cheb_Phi,
+        Q_reg = (
+            fourier_reg_Phi @ np.linalg.pinv(fourier_reg_Phi) @ cheb_reg_Phi
+            - cheb_reg_Phi
+        )
+        cheb_coeffs = np.linalg.solve(
+            a=(cheb_Phi.T @ cheb_Phi + hf_lambda * Q_reg.T @ Q_reg),
             b=cheb_Phi.T @ ys,
-            rcond=None,
-        )[0]
-
-        # from IPython.core.debugger import Pdb; Pdb().set_trace()
-        # cheb_coeffs = (
-        #     np.linalg.pinv(
-        #         (np.eye(N) - fourier_Phi @ np.linalg.pinv(fourier_Phi)) @ cheb_Phi
-        #     )
-        #     @ ys
-        # )
+        )
 
         return cls(
             cfg=ChebPolyConfig(
@@ -240,6 +220,6 @@ class ChebPoly(pl.LightningModule):
                 deg_limit=deg_limit,
                 num_components=len(cheb_coeffs),
             ),
-            coeffs=torch.Tensor(cheb_coeffs),
-            degs=torch.Tensor(degs),
+            coeffs=torch.tensor(cheb_coeffs, dtype=torch.float),
+            degs=torch.tensor(cheb_degs, dtype=torch.long),
         )
