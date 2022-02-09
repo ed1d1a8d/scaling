@@ -10,6 +10,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.random
+from torchtyping import TensorType as T
+from torchtyping import patch_typeguard
+from typeguard import typechecked
+
+patch_typeguard()  # use before @typechecked
 
 
 @dataclasses.dataclass(frozen=True)
@@ -21,6 +26,7 @@ class HarmonicFnConfig:
     learning_rate: float = 3e-4
 
 
+@typechecked
 class HarmonicFn(pl.LightningModule):
     """
     Represents a bandlimited function with of a fixed number of
@@ -117,6 +123,45 @@ class HarmonicFn(pl.LightningModule):
             side_samples=side_samples,
         )
 
+    @staticmethod
+    def harmonic_basis(
+        x: T["batch":..., "D"],  # type: ignore
+        freq_limit: int,
+    ) -> tuple[T["batch":..., "basis_size"], T["num_freqs", "D"]]:  # type: ignore
+        assert freq_limit >= 0
+        D = x.shape[-1]
+
+        def _include_freq(f: np.ndarray) -> bool:
+            nonzero_coords = f[f != 0]
+            if len(nonzero_coords) == 0:
+                return True
+            return nonzero_coords[0] > 0
+
+        all_freqs = (
+            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
+            .reshape(D, -1)
+            .T
+        )
+        freqs = torch.tensor(
+            np.stack(
+                [f for f in all_freqs if _include_freq(f)],
+                axis=0,
+            ),
+            dtype=x.dtype,
+        )
+
+        prod = torch.einsum("...i, fi -> ...f", x, freqs)
+        Phi = torch.cat(
+            (
+                torch.cos(2 * np.pi * prod),
+                torch.sin(2 * np.pi * prod)[:, 1:],
+            ),
+            dim=-1,
+        )
+        Phi[:, 1:] *= np.sqrt(2)  # Orthonormalize basis
+
+        return Phi, freqs
+
     @classmethod
     def construct_via_lstsq(
         cls,
@@ -131,31 +176,13 @@ class HarmonicFn(pl.LightningModule):
         assert freq_limit >= 0
         D = xs.shape[-1]
 
-        def _include_freq(f: np.ndarray) -> bool:
-            nonzero_coords = f[f != 0]
-            if len(nonzero_coords) == 0:
-                return True
-            return nonzero_coords[0] > 0
-
-        all_freqs = (
-            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
-            .reshape(D, -1)
-            .T
+        Phi, freqs = cls.harmonic_basis(
+            x=torch.tensor(xs),
+            freq_limit=freq_limit,
         )
-        freqs = np.stack(
-            [f for f in all_freqs if _include_freq(f)],
-            axis=0,
-        )
-        J = len(freqs)
-
-        Phi = np.concatenate(
-            (
-                np.cos(2 * np.pi * xs @ freqs.T),
-                np.sin(2 * np.pi * xs @ freqs.T)[:, 1:],
-            ),
-            axis=-1,
-        )
-        Phi[:, 1:] *= np.sqrt(2)  # Orthonormalize basis
+        Phi = Phi.numpy()
+        freqs = freqs.numpy()
+        num_freqs = freqs.shape[0]
 
         # all_coeffs = np.linalg.lstsq(a=Phi, b=ys, rcond=None)[0]
         # See https://stackoverflow.com/a/34171374/1337463
@@ -165,8 +192,8 @@ class HarmonicFn(pl.LightningModule):
         )
         all_coeffs[1:] *= np.sqrt(2)  # Change back to regular cos, sin basis
 
-        cos_coeffs = all_coeffs[:J]
-        sin_coeffs = np.pad(all_coeffs[J:], (1, 0))
+        cos_coeffs = all_coeffs[:num_freqs]
+        sin_coeffs = np.pad(all_coeffs[num_freqs:], (1, 0))
 
         coeffs = np.sqrt(cos_coeffs ** 2 + sin_coeffs ** 2)
         phases = np.arctan2(-sin_coeffs, cos_coeffs)
@@ -186,9 +213,9 @@ class HarmonicFn(pl.LightningModule):
                 freq_limit=int(sparse_freqs.max()),
                 num_components=len(sparse_coeffs),
             ),
-            coeffs=torch.Tensor(sparse_coeffs),
-            freqs=torch.Tensor(sparse_freqs),
-            phases=torch.Tensor(sparse_phases),
+            coeffs=torch.tensor(sparse_coeffs).float(),
+            freqs=torch.tensor(sparse_freqs, dtype=torch.long),
+            phases=torch.tensor(sparse_phases).float(),
         )
 
 

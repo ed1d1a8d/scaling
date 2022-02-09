@@ -4,6 +4,7 @@ from typing import Callable, Optional
 
 import numpy as np
 import torch
+from src.experiments.harmonics.harmonics import HarmonicFn
 
 
 def high_freq_norm_mcls(
@@ -12,6 +13,8 @@ def high_freq_norm_mcls(
     freq_limit: int,
     n_samples: int,
     device: Optional[torch.device] = None,
+    dtype: torch.dtype = torch.float32,
+    use_lstsq: bool = False,
 ) -> torch.Tensor:
     """
     Computes the 2-norm of high frequency fourier components of `fn` using
@@ -26,37 +29,26 @@ def high_freq_norm_mcls(
     if n_samples <= BASIS_SZ:
         return torch.tensor(0)
 
-    xs = torch.rand((n_samples, input_dim), device=device)
+    xs = torch.rand((n_samples, input_dim), device=device, dtype=dtype)
     ys = fn(xs)
 
-    all_freqs = (
-        np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(input_dim))]
-        .reshape(input_dim, -1)
-        .T
-    )
-
-    def _include_freq(f: np.ndarray) -> bool:
-        nonzero_coords = f[f != 0]
-        if len(nonzero_coords) == 0:
-            return True
-        return nonzero_coords[0] > 0
-
-    basis_freqs = torch.Tensor(
-        np.stack(
-            [f for f in all_freqs if _include_freq(f)],
-            axis=0,
-        )
-    ).to(device)
-
-    basis_ys: torch.Tensor = torch.concat(
-        (
-            torch.cos(2 * np.pi * basis_freqs @ xs.T),
-            torch.sin(2 * np.pi * basis_freqs @ xs.T)[1:],
-        ),
-        dim=0,
-    )
-    basis_ys /= torch.sqrt((basis_ys * basis_ys).mean(dim=-1, keepdim=True))
+    basis_ys = HarmonicFn.harmonic_basis(
+        x=xs,
+        freq_limit=freq_limit,
+    )[0].T
+    # basis_ys /= torch.sqrt((basis_ys * basis_ys).mean(dim=-1, keepdim=True))
     assert basis_ys.shape == (BASIS_SZ, n_samples)
+
+    if use_lstsq:
+        # Alt. Method 2:
+        # Alternate implementation using torch.linalg.lstsq doesn't work because
+        # lstsq is not differentiable...
+        #
+        # See https://github.com/pytorch/pytorch/issues/27036#issuecomment-743413633
+        # for details.
+        coeffs: torch.Tensor = torch.linalg.lstsq(basis_ys.T, ys).solution
+        residuals = (basis_ys.T @ coeffs) - ys
+        return (residuals * residuals).mean()
 
     residuals = basis_ys.T @ (torch.pinverse(basis_ys.T) @ ys) - ys
     return (residuals * residuals).mean()
@@ -67,16 +59,6 @@ def high_freq_norm_mcls(
     # residuals = approx_basis_coeffs @ basis_ys - ys
     # return (residuals * residuals).mean()
 
-    # Alt. Method 2:
-    # Alternate implementation using torch.linalg.lstsq doesn't work because
-    # lstsq is not differentiable...
-    #
-    #   res: torch.Tensor = torch.linalg.lstsq(basis_ys, ys).residuals[0]
-    #   assert res.shape == ()
-    #
-    # See https://github.com/pytorch/pytorch/issues/27036#issuecomment-743413633
-    # for details.
-
 
 def high_freq_norm_dft(
     fn: Callable[[torch.Tensor], torch.Tensor],
@@ -84,7 +66,6 @@ def high_freq_norm_dft(
     freq_limit: int,
     side_samples: int,
     device: Optional[torch.device] = None,
-    debug: bool = False,
 ) -> torch.Tensor:
     """
     Computes the 2-norm of high frequency fourier components of `fn` using
