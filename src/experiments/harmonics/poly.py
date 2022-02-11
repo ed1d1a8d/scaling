@@ -158,6 +158,7 @@ class ChebPoly(pl.LightningModule):
         deg_limit: int,
         freq_limit: int,
         hf_lambda: float,
+        l2_lambda: float = 0,
         n_reg_samples: int = 512,
     ) -> ChebPoly:
         """
@@ -168,7 +169,7 @@ class ChebPoly(pl.LightningModule):
         assert deg_limit >= 0
         assert freq_limit >= 0
         assert hf_lambda >= 0
-        N, D = xs.shape
+        _, D = xs.shape
 
         ################################
         # Compute cheb_Phi
@@ -210,7 +211,7 @@ class ChebPoly(pl.LightningModule):
             - cheb_reg_Phi
         )
         cheb_coeffs = np.linalg.solve(
-            a=(cheb_Phi.T @ cheb_Phi + hf_lambda * Q_reg.T @ Q_reg),
+            a=(cheb_Phi.T @ cheb_Phi + hf_lambda * Q_reg.T @ Q_reg + l2_lambda * cheb_reg_Phi.T @ cheb_reg_Phi),
             b=cheb_Phi.T @ ys,
         )
 

@@ -7,5 +7,6 @@ lightning_logs
 
 notebooks/archive
 notebooks/cache
+notebooks/plots
 
 .mypy_cache
