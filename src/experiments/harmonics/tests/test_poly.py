@@ -3,6 +3,7 @@ import logging
 import unittest
 import warnings
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from src.experiments.harmonics.data import HypercubeDataModule
@@ -56,13 +57,16 @@ class TestPoly(unittest.TestCase):
         model: pl.LightningModule,
         dl: torch.utils.data.DataLoader,
     ):
-        return pl.Trainer(enable_progress_bar=False, gpus=0).test(
+        return pl.Trainer(enable_progress_bar=False, gpus=0, logger=False).test(
             model=model,
             dataloaders=dl,
             verbose=False,
         )[0]["test_mse"]
 
     def test_construct_via_lstsq(self):
+        torch.manual_seed(42)
+        np.random.seed(42)
+
         dm = HypercubeDataModule(
             fn=self.poly,
             input_dim=self.poly.cfg.input_dim,

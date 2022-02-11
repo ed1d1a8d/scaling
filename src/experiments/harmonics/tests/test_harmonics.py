@@ -31,7 +31,7 @@ class TestHarmonicFn(unittest.TestCase):
         model: pl.LightningModule,
         dl: torch.utils.data.DataLoader,
     ):
-        return pl.Trainer(enable_progress_bar=False, gpus=0).test(
+        return pl.Trainer(enable_progress_bar=False, gpus=0, logger=False).test(
             model=model,
             dataloaders=dl,
             verbose=False,

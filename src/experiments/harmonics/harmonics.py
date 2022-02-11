@@ -148,6 +148,7 @@ class HarmonicFn(pl.LightningModule):
                 axis=0,
             ),
             dtype=x.dtype,
+            device=x.device,
         )
 
         prod = torch.einsum("...i, fi -> ...f", x, freqs)

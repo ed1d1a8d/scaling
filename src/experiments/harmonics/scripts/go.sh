@@ -3,9 +3,9 @@
 # This script should be launched from the root of the repository, i.e.
 # ./src/experiments/harmonics/scripts/go.sh
 
-high_freq_lambdas=( 0.1 1 10 )
-high_freq_mcls_sampless=(1024 16384)
-high_freq_dft_sss=(6 12)
+high_freq_lambdas=(1)
+high_freq_mcls_sampless=(512 4096 10000 20000 40000 80000 100000)
+high_freq_dft_sss=(12 16 17 18)
 for high_freq_lambda in "${high_freq_lambdas[@]}"
 do
   for samples in "${high_freq_mcls_sampless[@]}"

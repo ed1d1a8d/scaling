@@ -23,10 +23,14 @@ conda activate scaling
 conda env list
 which python
 
-# Run copies of script
-# python -m src.experiments.harmonics.run_experiment --layer_widths 32 32 32 1 $@ &
-# python -m src.experiments.harmonics.run_experiment --layer_widths 64 64 64 1 $@ &
-python -m src.experiments.harmonics.run_experiment $@ &
+# Launch proxy
+{ mallory; } &
 
-wait
+# Run experiment
+{ python -m src.experiments.harmonics.run_experiment $@; } &
+
+# Wait till experiment finishes, then kill mallory
+# See https://unix.stackexchange.com/a/231678/466333 for details.
+wait -n
+pkill -P
 EOT

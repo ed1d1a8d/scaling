@@ -4,6 +4,7 @@ __pycache__
 mlruns
 slurm-logs
 lightning_logs
+wandb
 
 notebooks/archive
 notebooks/cache

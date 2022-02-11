@@ -1,15 +1,15 @@
 import dataclasses
 import logging
-import pathlib
+import os
 import pickle
 import tempfile
 import warnings
+from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
-import mlflow
 import numpy as np
 import pytorch_lightning as pl
-import src.utils as utils
+import wandb
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
@@ -95,13 +95,54 @@ def exact_log_2(n: int) -> int:
     return res
 
 
-class CustomMLFlowCallback(pl.Callback):
+REGISTERED_METRICS = set()
+
+
+def wandb_custom_log(
+    metrics: dict[str, float],
+    step: int,
+    step_name: str,
+    metric_prefix: Optional[str] = None,
+    metric_suffix: Optional[str] = None,
+):
+    global REGISTERED_METRICS
+
+    if metric_prefix is not None:
+        metrics = {f"{metric_prefix}/{k}": v for k, v in metrics.items()}
+    if metric_suffix is not None:
+        metrics = {f"{k}/{metric_suffix}": v for k, v in metrics.items()}
+
+    if step_name not in REGISTERED_METRICS:
+        wandb.define_metric(name=step_name, hidden=True)
+        REGISTERED_METRICS.add(step_name)
+    for metric_name in metrics.keys():
+        if metric_name not in REGISTERED_METRICS:
+            wandb.define_metric(name=metric_name, step_metric=step_name)
+            REGISTERED_METRICS.add(metric_name)
+
+    wandb.log(metrics | {step_name: step})
+
+
+def aggregate_metrics(
+    list_of_metrics: list[dict[str, float]],
+    agg_fn: Callable[[list[float]], float],
+) -> dict[str, float]:
+    if len(list_of_metrics) == 0:
+        return dict()
+    return {
+        k: agg_fn([m[k] for m in list_of_metrics]) for k in list_of_metrics[0].keys()
+    }
+
+
+class CustomLoggingCallback(pl.Callback):
     def __init__(
         self,
-        tag: str,
+        tag_prefix: str,
+        tag_suffix: str,
         n_train: int,
     ):
-        self.tag = tag
+        self.tag_prefix = tag_prefix
+        self.tag_suffix = tag_suffix
         self.n_train = n_train
         self.train_epochs_completed = 0
 
@@ -109,21 +150,20 @@ class CustomMLFlowCallback(pl.Callback):
         self.best_epochs: int = -1
         self.best_num_dps: int = -1
 
-    def tag_dict(self, **kwargs) -> dict[str, float]:
-        # The zzz at the front is to make it go to the end of the mlflow logs.
-        return {f"zzz_{self.tag}_{k}": v for k, v in kwargs.items()}
-
     def on_train_epoch_end(self, trainer: pl.Trainer, *_, **__):
         self.train_epochs_completed += 1
 
-        mlflow.log_metrics(
-            metrics=self.tag_dict(
+        wandb_custom_log(
+            metrics=dict(
                 train_mse=float(trainer.logged_metrics["train_mse"]),
                 train_hfn=float(trainer.logged_metrics["train_hfn"]),
                 train_loss=float(trainer.logged_metrics["train_loss"]),
                 val_mse=float(trainer.logged_metrics["val_mse"]),
             ),
+            step_name="n_dps_seen",
             step=self.n_train * self.train_epochs_completed,
+            metric_prefix=self.tag_prefix,
+            metric_suffix=self.tag_suffix,
         )
 
         val_mse = float(trainer.logged_metrics["val_mse"])
@@ -146,7 +186,8 @@ def train_student(
     hf: HarmonicFn,
     n_train: int,
     cfg: ExperimentConfig,
-    tag: str,
+    tag_prefix: str,
+    tag_suffix: str,
     seed: int,
 ) -> tuple[FCNet, TrainResult]:
     pl.seed_everything(seed, workers=True)
@@ -177,7 +218,7 @@ def train_student(
         num_workers=cfg.num_workers,
     )
 
-    cc = CustomMLFlowCallback(tag=tag, n_train=n_train)
+    cc = CustomLoggingCallback(tag_prefix=tag_prefix, tag_suffix=tag_suffix, n_train=n_train,)
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         ckpt = ModelCheckpoint(monitor="val_mse", dirpath=tmpdirname)
@@ -225,9 +266,10 @@ def train_student(
 def run_experiment(cfg: ExperimentConfig):
     assert all(perfect_pow_2(n) for n in cfg.train_sizes)
 
-    # Dump config
-    with open(mlflow.get_artifact_uri("config.pkl"), "wb") as f:
+    # Dump config, makes it easier to load
+    with open(os.path.join(wandb.run.dir, "config.pkl"), "wb") as f:
         pickle.dump(cfg, f)
+    wandb.save(os.path.join(wandb.run.dir, "config.pkl"), policy="now")
 
     hf = HarmonicFn(
         cfg=HarmonicFnConfig(
@@ -240,39 +282,40 @@ def run_experiment(cfg: ExperimentConfig):
 
     # Save hf info
     hf.viz_2d(side_samples=cfg.viz_samples, pad=cfg.viz_pad, value=cfg.viz_value)
-    mlflow.log_figure(figure=plt.gcf(), artifact_file="hf-viz.png")
+    wandb.log({"hf_viz": plt.gcf()})
     plt.cla()
-    with open(mlflow.get_artifact_uri("hf.pkl"), "wb") as f:
-        pickle.dump(hf, f)
 
     for n_train in cfg.train_sizes:
+        metrics_by_trial: list[dict[str, float]] = []
         for trial in range(cfg.trials_per_size):
             print(f"Training for {n_train=}, {trial=}")
-            # n_tag = f"n_{n_train:07}"
-            full_tag = f"n_{n_train:07}_trial_{trial:02}"
+
+            n_train_tag = f"n_{n_train:07}"
+            trial_tag = f"trial_{trial:02}"
 
             student, tr = train_student(
                 hf=hf,
                 n_train=n_train,
                 cfg=cfg,
-                tag=full_tag,
+                tag_prefix=f"train_details/{n_train_tag}",
+                tag_suffix=trial_tag,
                 seed=trial,
             )
 
-            def _add_log10s(d: dict[str, float]) -> dict[str, float]:
-                return d | {f"log10_{k}": np.log10(v + 1e-42) for k, v in d.items()}
-
             print(tr)
-            mlflow.log_metrics(
-                _add_log10s(
-                    dict(
-                        train_mse=tr.train_mse,
-                        val_mse=tr.val_mse,
-                        epochs=tr.epochs,
-                        num_dps=tr.num_dps,
-                    )
-                ),
+            metrics = dict(
+                train_mse=tr.train_mse,
+                val_mse=tr.val_mse,
+                epochs=tr.epochs,
+                num_dps=tr.num_dps,
+            )
+            metrics_by_trial.append(metrics)
+            wandb_custom_log(
+                metrics=metrics,
                 step=exact_log_2(n_train),
+                step_name="n_train_dps",
+                metric_prefix="summary",
+                metric_suffix=f"{trial:02}",
             )
 
             student.viz_2d(
@@ -280,11 +323,16 @@ def run_experiment(cfg: ExperimentConfig):
                 pad=cfg.viz_pad,
                 value=cfg.viz_value,
             )
-            mlflow.log_figure(
-                figure=plt.gcf(),
-                artifact_file=f"student-viz/{full_tag}.png",
-            )
+            wandb.log({f"student_viz/{n_train_tag}/{trial_tag}": plt.gcf()})
             plt.cla()
+
+        wandb_custom_log(
+            metrics=aggregate_metrics(metrics_by_trial, agg_fn=np.median),
+            step=exact_log_2(n_train),
+            step_name="n_train_dps",
+            metric_prefix="summary",
+            metric_suffix="median",
+        )
 
 
 def main():
@@ -294,19 +342,17 @@ def main():
     args = parser.parse_args()
     cfg: ExperimentConfig = args.experiment_config
 
-    # Initialize mlflow
-    utils.mlflow_init()
-    mlflow.set_experiment("harmonics-bw-reg-v2")
+    # Initialize wandb
+    wandb.init(
+        entity="data-frugal-learning",
+        project="harmonic-learning",
+        tags=["nn", "regularization"],
+        config=dataclasses.asdict(cfg),
+        save_code=True,
+    )
 
-    with mlflow.start_run():
-        # Log current script
-        mlflow.log_artifact(local_path=pathlib.Path(__file__))
-
-        # Log experiment cfg
-        mlflow.log_params(dataclasses.asdict(cfg))
-
-        # Run experiment
-        run_experiment(cfg)
+    # Run experiment
+    run_experiment(cfg)
 
 
 if __name__ == "__main__":
