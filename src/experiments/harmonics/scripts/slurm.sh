@@ -24,7 +24,8 @@ conda env list
 which python
 
 # Launch proxy
-{ mallory; } &
+# Allow failure since sometimes mallory is already launched and ports are taken.
+{ mallory || true; } &
 
 # Run experiment
 { python -m src.experiments.harmonics.run_experiment $@; } &

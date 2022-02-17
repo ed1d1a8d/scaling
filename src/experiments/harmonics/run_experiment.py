@@ -25,11 +25,11 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 @dataclasses.dataclass(frozen=True)
 class ExperimentConfig:
-    input_dim: int = 4
+    input_dim: int = 2
 
-    freq_limit: int = 2  # For ground truth harmonic function
+    freq_limit: int = 3  # For ground truth harmonic function
     num_components: int = 16  # For ground truth harmonic function
-    true_hf_seed: int = -1
+    true_hf_seed: int = 42
 
     # (96, 192, 1) is from https://arxiv.org/pdf/2102.06701.pdf.
     layer_widths: tuple[int, ...] = (128, 128, 128, 1)
@@ -64,7 +64,7 @@ class ExperimentConfig:
     num_workers: int = 0
 
     viz_samples: int = 512  # Number of side samples for visualizations
-    viz_pad: tuple[int, int] = (1, 1)  # Visualization padding
+    viz_pad: tuple[int, int] = (0, 0)  # Visualization padding
     viz_value: float = 0.42  # Vizualization value
 
 
@@ -312,7 +312,7 @@ def run_experiment(cfg: ExperimentConfig):
             metrics_by_trial.append(metrics)
             wandb_custom_log(
                 metrics=metrics,
-                step=exact_log_2(n_train),
+                step=n_train,
                 step_name="n_train_dps",
                 metric_prefix="summary",
                 metric_suffix=f"{trial:02}",
@@ -328,7 +328,7 @@ def run_experiment(cfg: ExperimentConfig):
 
         wandb_custom_log(
             metrics=aggregate_metrics(metrics_by_trial, agg_fn=np.median),
-            step=exact_log_2(n_train),
+            step=n_train,
             step_name="n_train_dps",
             metric_prefix="summary",
             metric_suffix="median",
@@ -345,7 +345,7 @@ def main():
     # Initialize wandb
     wandb.init(
         entity="data-frugal-learning",
-        project="harmonic-learning",
+        project="harmonic-learning-2d",
         tags=["nn", "regularization"],
         config=dataclasses.asdict(cfg),
         save_code=True,
