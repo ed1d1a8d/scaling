@@ -25,7 +25,7 @@ which python
 
 # Launch proxy
 # Allow failure since sometimes mallory is already launched and ports are taken.
-{ mallory || true; } &
+{ mallory || sleep infinity; } &
 
 # Run experiment
 { python -m src.experiments.harmonics.run_experiment $@; } &
@@ -33,5 +33,5 @@ which python
 # Wait till experiment finishes, then kill mallory
 # See https://unix.stackexchange.com/a/231678/466333 for details.
 wait -n
-pkill -P
+pkill -P $$
 EOT
