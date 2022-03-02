@@ -1,7 +1,6 @@
 # Python 3.9.7
 
 # ML libraries
-# pip install jax[cuda11_cudnn805] -f https://storage.googleapis.com/jax-releases/jax_releases.html
 # tensorflow==2.7.0
 # tensorflow-datasets==4.4.0
 --find-links https://storage.googleapis.com/jax-releases/jax_releases.html
@@ -14,7 +13,8 @@ einops==0.3.2
 pytorch-lightning==1.5.5
 torchtyping==0.1.4
 
-jax==0.2.26+cuda11_cudnn805
+--find-links https://storage.googleapis.com/jax-releases/jax_releases.html
+jax[cuda11_cudnn805]
 neural-tangents==0.3.9
 
 # Configuration parsing
