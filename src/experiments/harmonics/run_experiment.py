@@ -38,7 +38,7 @@ class ExperimentConfig:
     val_seed: int = -2
 
     train_sizes: tuple[int, ...] = tuple(int(2 ** x) for x in range(18))
-    trials_per_size: int = 3
+    trials_per_size: int = 1
 
     learning_rate: float = 3e-3
     max_epochs: int = 9001
@@ -46,8 +46,8 @@ class ExperimentConfig:
 
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 1
-    high_freq_freq_limit: int = 2
-    high_freq_mcls_samples: int = 1024
+    high_freq_freq_limit: int = 3
+    high_freq_mcls_samples: int = 10_000
     high_freq_dft_ss: int = 8
 
     # TODO: Implement l2_reg
@@ -218,7 +218,11 @@ def train_student(
         num_workers=cfg.num_workers,
     )
 
-    cc = CustomLoggingCallback(tag_prefix=tag_prefix, tag_suffix=tag_suffix, n_train=n_train,)
+    cc = CustomLoggingCallback(
+        tag_prefix=tag_prefix,
+        tag_suffix=tag_suffix,
+        n_train=n_train,
+    )
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         ckpt = ModelCheckpoint(monitor="val_mse", dirpath=tmpdirname)
@@ -348,7 +352,6 @@ def main():
         project="harmonic-learning-2d",
         tags=["nn", "regularization"],
         config=dataclasses.asdict(cfg),
-        save_code=True,
     )
 
     # Run experiment

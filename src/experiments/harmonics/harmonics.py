@@ -17,13 +17,12 @@ from typeguard import typechecked
 patch_typeguard()  # use before @typechecked
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class HarmonicFnConfig:
     input_dim: int
     freq_limit: int
     num_components: int
     seed: int = 42
-    learning_rate: float = 3e-4
 
 
 @typechecked
@@ -220,10 +219,18 @@ class HarmonicFn(pl.LightningModule):
         )
 
 
+@dataclasses.dataclass
+class HarmonicFnTrainableConfig(HarmonicFnConfig):
+    learning_rate: float = 3e-4
+    sched_monitor: str = "train_mse"
+    sched_patience: int = 25
+    sched_decay: float = 0.1
+    sched_min_lr: float = 1e-6
+
 class HarmonicFnTrainable(HarmonicFn):
     """A HarmonicFn with trainable parameters."""
 
-    def __init__(self, cfg: HarmonicFnConfig):
+    def __init__(self, cfg: HarmonicFnTrainableConfig):
         super().__init__(cfg, requires_grad=True)
 
     def training_step(self, batch, *_, **__):
@@ -242,4 +249,17 @@ class HarmonicFnTrainable(HarmonicFn):
         self.log("val_mse", mse)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
+        opt = torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
+        sched_config = dict(
+            scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer=opt,
+                mode="min",
+                factor=self.cfg.sched_decay,
+                patience=self.cfg.sched_patience,
+                min_lr=self.cfg.sched_min_lr,
+                verbose=True,
+            ),
+            monitor=self.cfg.sched_monitor,
+        )
+
+        return [opt], [sched_config]

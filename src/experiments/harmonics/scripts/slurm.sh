@@ -7,11 +7,12 @@
 #
 # Also see https://stackoverflow.com/a/44168719/1337463.
 
+
+
 sbatch <<EOT
 #!/bin/bash
-
 # Slurm sbatch options
-#SBATCH -o slurm-logs/harmonics/harmonics.log-%j
+#SBATCH -o slurm-logs/harmonics/log-%j
 #SBATCH -c 16
 #SBATCH --gres=gpu:volta:1
 
@@ -20,12 +21,10 @@ sbatch <<EOT
 # for details on why we do it this way.
 source /state/partition1/llgrid/pkg/anaconda/anaconda3-2021b/etc/profile.d/conda.sh
 conda activate scaling
-conda env list
-which python
 
-# Launch proxy
-# Allow failure since sometimes mallory is already launched and ports are taken.
-{ mallory || sleep infinity; } &
+# Set up and launch proxy
+source scripts/rand-mallory.sh
+{ mallory -config \$TMP_MALLORY_CONFIG; } &
 
 # Run experiment
 { python -m src.experiments.harmonics.run_experiment $@; } &
@@ -33,5 +32,5 @@ which python
 # Wait till experiment finishes, then kill mallory
 # See https://unix.stackexchange.com/a/231678/466333 for details.
 wait -n
-pkill -P $$
+pkill -P \$\$
 EOT

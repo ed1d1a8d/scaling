@@ -2,23 +2,36 @@ import dataclasses
 import enum
 
 import numpy as np
+import mup
 import pytorch_lightning as pl
 import src.experiments.harmonics.bw_loss as bw_loss
 import src.utils as utils
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import mup
 
 class HFReg(enum.Enum):
     MCLS = "MCLS"
     DFT = "DFT"
 
 
-@dataclasses.dataclass(frozen=True)
+class SinActivation(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.sin(x)
+
+
+class ActivationT(enum.Enum):
+    RELU = nn.ReLU
+    SIN = SinActivation
+
+
+@dataclasses.dataclass
 class FCNetConfig:
     input_dim: int = 2
     layer_widths: tuple[int, ...] = (96, 192, 1)
+    act: ActivationT = ActivationT.RELU
+    param_init_std: float = 1.0
 
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 0
@@ -36,17 +49,29 @@ class FCNetConfig:
 class FCNet(pl.LightningModule):
     """A fully connected neural network."""
 
-    def __init__(self, cfg: FCNetConfig):
+    def __init__(
+        self,
+        cfg: FCNetConfig,
+    ):
         super().__init__()
         self.cfg = cfg
         assert self.cfg.layer_widths[-1] == 1
 
-        _layers: list[nn.Module] = [nn.Linear(cfg.input_dim, cfg.layer_widths[0])]
-        for w_in, w_out in zip(cfg.layer_widths, cfg.layer_widths[1:]):
-            _layers.append(nn.ReLU())
-            _layers.append(nn.Linear(w_in, w_out))
+        _layers: list[nn.Module] = []
+        if len(cfg.layer_widths) == 1:
+            _layers.append(mup.MuReadout(cfg.input_dim, 1))
+        else:
+            _layers.append(nn.Linear(cfg.input_dim, cfg.layer_widths[0]))
+            for w_in, w_out in zip(cfg.layer_widths[:-2], cfg.layer_widths[1:]):
+                _layers.append(cfg.act.value())
+                _layers.append(nn.Linear(w_in, w_out))
+            _layers.append(cfg.act.value())
+            _layers.append(mup.MuReadout(cfg.layer_widths[-2], 1))
 
         self.net = nn.Sequential(*_layers)
+        mup.set_base_shapes(self.net, None)
+        # for param in self.net.parameters():
+        #     mup.init.xavier_normal_(param, cfg.param_init_std)
 
         self.save_hyperparameters()
 
@@ -94,7 +119,7 @@ class FCNet(pl.LightningModule):
         self._step_helper(batch=batch, log_prefix="test_")
 
     def configure_optimizers(self):
-        opt = torch.optim.Adam(self.parameters(), lr=self.cfg.learning_rate)
+        opt = mup.MuAdam(self.parameters(), lr=self.cfg.learning_rate)
         sched_config = dict(
             scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer=opt,
