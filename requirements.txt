@@ -30,7 +30,7 @@ pandas==1.3.4
 wandb==0.12.10
 
 # Utilities
-black==21.10b0
+black==22.3.0
 flake8==4.0.1
 gpustat==0.6.0
 isort==5.10.0
@@ -39,3 +39,6 @@ jupyterlab==3.2.2
 jupyterlab-code-formatter==1.4.10
 mypy==0.930
 tqdm==4.62.3
+
+# Fixes bug
+setuptools==59.5.0

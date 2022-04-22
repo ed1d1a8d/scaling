@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import mup
 
+
 class HFReg(enum.Enum):
     MCLS = "MCLS"
     DFT = "DFT"
@@ -44,6 +45,7 @@ class FCNetConfig:
     sched_patience: int = 25
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6
+    sched_verbose: bool = False
 
 
 class FCNet(pl.LightningModule):
@@ -85,12 +87,16 @@ class FCNet(pl.LightningModule):
         self.log(f"{log_prefix}mse", mse)
 
         if self.cfg.high_freq_reg == HFReg.MCLS:
-            hfn = bw_loss.high_freq_norm_mcls(
-                fn=self.forward,
-                input_dim=self.cfg.input_dim,
-                freq_limit=self.cfg.high_freq_freq_limit,
-                n_samples=self.cfg.high_freq_mcls_samples,
-                device=torch.device(self.device),
+            hfn = (
+                0
+                if self.cfg.high_freq_lambda == 0
+                else bw_loss.high_freq_norm_mcls(
+                    fn=self.forward,
+                    input_dim=self.cfg.input_dim,
+                    freq_limit=self.cfg.high_freq_freq_limit,
+                    n_samples=self.cfg.high_freq_mcls_samples,
+                    device=torch.device(self.device),
+                )
             )
         elif self.cfg.high_freq_reg == HFReg.DFT:
             hfn = bw_loss.high_freq_norm_dft(
@@ -120,6 +126,7 @@ class FCNet(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = mup.MuAdam(self.parameters(), lr=self.cfg.learning_rate)
+        # opt = mup.MuSGD(self.parameters(), lr=self.cfg.learning_rate)
         sched_config = dict(
             scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer=opt,
@@ -127,7 +134,7 @@ class FCNet(pl.LightningModule):
                 factor=self.cfg.sched_decay,
                 patience=self.cfg.sched_patience,
                 min_lr=self.cfg.sched_min_lr,
-                verbose=True,
+                verbose=self.cfg.sched_verbose,
             ),
             monitor=self.cfg.sched_monitor,
         )

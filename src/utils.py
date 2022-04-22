@@ -4,7 +4,6 @@ import pickle
 from typing import Callable
 
 import matplotlib.pyplot as plt
-import mlflow
 import numpy as np
 from PIL import Image
 import torch

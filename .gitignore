@@ -5,6 +5,7 @@ mlruns
 slurm-logs
 lightning_logs
 wandb
+data
 
 notebooks/archive
 notebooks/cache
