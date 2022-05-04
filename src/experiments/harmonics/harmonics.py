@@ -227,6 +227,7 @@ class HarmonicFnTrainableConfig(HarmonicFnConfig):
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6
 
+
 class HarmonicFnTrainable(HarmonicFn):
     """A HarmonicFn with trainable parameters."""
 

@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+import os
 import warnings
 from typing import Union
 
@@ -10,7 +11,7 @@ import wandb
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
 from src.experiments.harmonics.data import HypercubeDataModule
-from src.experiments.harmonics.fc_net import FCNet, FCNetConfig
+from src.experiments.harmonics.fc_net import FCNet, FCNetConfig, HFReg
 from src.experiments.harmonics.harmonics import HarmonicFn, HarmonicFnConfig
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
@@ -20,18 +21,18 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class ExperimentConfig:
-    hf_cfg: HarmonicFnConfig = HarmonicFnConfig()
-    net_cfg: FCNetConfig = FCNetConfig()
+    hf_cfg: HarmonicFnConfig = HarmonicFnConfig(
+        input_dim=2,
+        freq_limit=2,
+        num_components=16,
+    )
 
-    input_dim: int = 2
-
-    freq_limit: int = 3  # For ground truth harmonic function
-    num_components: int = 16  # For ground truth harmonic function
-    true_hf_seed: int = 42
-
-    layer_widths: tuple[int, ...] = (128, 128, 128, 1)
+    net_cfg: FCNetConfig = FCNetConfig(
+        high_freq_reg=HFReg.NONE,
+        layer_widths=(512, 512, 512, 1),
+    )
 
     n_train: int = 100
     train_data_seed: int = 0
@@ -48,7 +49,11 @@ class ExperimentConfig:
     viz_pad: tuple[int, int] = (0, 0)  # Visualization padding
     viz_value: float = 0.42  # Vizualization value
 
-    @property
+    tags: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        assert self.hf_cfg.input_dim == self.net_cfg.input_dim
+
     def get_hf(self) -> HarmonicFn:
         return HarmonicFn(cfg=self.hf_cfg)
 
@@ -80,14 +85,14 @@ def viz_to_wandb(cfg: ExperimentConfig, fn: Union[HarmonicFn, FCNet], viz_name: 
         pad=cfg.viz_pad,
         value=cfg.viz_value,
     )
-    wandb.summary({viz_name: plt.gcf()})
+    wandb.log({viz_name: plt.gcf()})
     plt.clf()
 
 
 class CustomCallback(pl.Callback):
-    def __init__(self, leave_pbar: bool):
+    def __init__(self):
         super().__init__()
-        self.pbar = tqdm(leave=leave_pbar)
+        self.pbar = tqdm()
 
     def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
         md = {k: v.item() for k, v in trainer.logged_metrics.items()}
@@ -123,6 +128,9 @@ def train(dm: HypercubeDataModule, net: FCNet):
         datamodule=dm,
     )
 
+    # Save model checkpoint
+    trainer.save_checkpoint(os.path.join(wandb.run.dir, "net.ckpt"))
+
 
 def evaluate(dm: HypercubeDataModule, net: FCNet):
     def _get_mse(dl: DataLoader):
@@ -133,16 +141,12 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
             weights_summary=None,
         ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
 
-    wandb.summary(
-        {
-            "train_mse": _get_mse(dm.train_dataloader(shuffle=False)),
-            "val_mse": _get_mse(dm.val_dataloader(shuffle=False)),
-        }
-    )
+    wandb.run.summary["train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
+    wandb.run.summary["val_mse"] = _get_mse(dm.val_dataloader(shuffle=False))
 
 
 def run_experiment(cfg: ExperimentConfig):
-    hf = cfg.get_true_hf()
+    hf = cfg.get_hf()
     viz_to_wandb(cfg=cfg, fn=hf, viz_name="true_hf")
 
     dm = cfg.get_dm()
@@ -169,9 +173,13 @@ def main():
     wandb.init(
         entity="data-frugal-learning",
         project="harmonic-learning",
-        tags=["nn", "regularization"],
+        tags=cfg.tags,
         config=dataclasses.asdict(cfg),
+        save_code=True,
     )
+
+    # Save all ckpt files immediately
+    wandb.save("*.ckpt")
 
     # Run experiment
     run_experiment(cfg)

@@ -12,3 +12,6 @@ notebooks/cache
 notebooks/plots
 
 .mypy_cache
+
+# pytorchlightning
+checkpoints
