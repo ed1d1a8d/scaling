@@ -13,8 +13,9 @@ import mup
 
 
 class HFReg(enum.Enum):
-    MCLS = "MCLS"
-    DFT = "DFT"
+    MCLS = enum.auto()
+    DFT = enum.auto()
+    NONE = enum.auto()
 
 
 class SinActivation(nn.Module):
@@ -32,7 +33,6 @@ class FCNetConfig:
     input_dim: int = 2
     layer_widths: tuple[int, ...] = (96, 192, 1)
     act: ActivationT = ActivationT.RELU
-    param_init_std: float = 1.0
 
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 0
@@ -40,8 +40,8 @@ class FCNetConfig:
     high_freq_mcls_samples: int = 1024
     high_freq_dft_ss: int = 8
 
-    learning_rate: float = 3e-4
-    sched_monitor: str = "val_mse"
+    learning_rate: float = 1e-3
+    sched_monitor: str = "train_mse"
     sched_patience: int = 25
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6
@@ -72,8 +72,6 @@ class FCNet(pl.LightningModule):
 
         self.net = nn.Sequential(*_layers)
         mup.set_base_shapes(self.net, None)
-        # for param in self.net.parameters():
-        #     mup.init.xavier_normal_(param, cfg.param_init_std)
 
         self.save_hyperparameters()
 
@@ -87,16 +85,12 @@ class FCNet(pl.LightningModule):
         self.log(f"{log_prefix}mse", mse)
 
         if self.cfg.high_freq_reg == HFReg.MCLS:
-            hfn = (
-                0
-                if self.cfg.high_freq_lambda == 0
-                else bw_loss.high_freq_norm_mcls(
-                    fn=self.forward,
-                    input_dim=self.cfg.input_dim,
-                    freq_limit=self.cfg.high_freq_freq_limit,
-                    n_samples=self.cfg.high_freq_mcls_samples,
-                    device=torch.device(self.device),
-                )
+            hfn = bw_loss.high_freq_norm_mcls(
+                fn=self.forward,
+                input_dim=self.cfg.input_dim,
+                freq_limit=self.cfg.high_freq_freq_limit,
+                n_samples=self.cfg.high_freq_mcls_samples,
+                device=torch.device(self.device),
             )
         elif self.cfg.high_freq_reg == HFReg.DFT:
             hfn = bw_loss.high_freq_norm_dft(
@@ -106,8 +100,10 @@ class FCNet(pl.LightningModule):
                 side_samples=self.cfg.high_freq_dft_ss,
                 device=torch.device(self.device),
             )
+        elif self.cfg.high_freq_reg == HFReg.NONE:
+            hfn = 0
         else:
-            assert False
+            raise ValueError(self.cfg.high_freq_reg)
         self.log(f"{log_prefix}hfn", hfn)
 
         loss = mse + self.cfg.high_freq_lambda * hfn
@@ -126,7 +122,6 @@ class FCNet(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = mup.MuAdam(self.parameters(), lr=self.cfg.learning_rate)
-        # opt = mup.MuSGD(self.parameters(), lr=self.cfg.learning_rate)
         sched_config = dict(
             scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer=opt,

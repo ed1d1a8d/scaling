@@ -7,8 +7,6 @@
 #
 # Also see https://stackoverflow.com/a/44168719/1337463.
 
-
-
 sbatch <<EOT
 #!/bin/bash
 # Slurm sbatch options
