@@ -25,7 +25,7 @@ source scripts/rand-mallory.sh
 { mallory -config \$TMP_MALLORY_CONFIG; } &
 
 # Run experiment
-{ python -m src.experiments.harmonics.run_experiment $@; } &
+{ python -m src.experiments.harmonics.run_experiment_v2 $@; } &
 
 # Wait till experiment finishes, then kill mallory
 # See https://unix.stackexchange.com/a/231678/466333 for details.

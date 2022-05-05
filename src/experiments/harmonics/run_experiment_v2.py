@@ -32,13 +32,17 @@ class ExperimentConfig:
     net_cfg: FCNetConfig = FCNetConfig(
         high_freq_reg=HFReg.NONE,
         layer_widths=(512, 512, 512, 1),
+        sched_verbose=True,
+        high_freq_freq_limit=2,
+        high_freq_lambda=1,
+        high_freq_mcls_samples=20_000,
     )
 
     n_train: int = 100
     train_data_seed: int = 0
 
-    n_val: int = 1024
-    val_data_seed: int = -1
+    n_val: int = 512
+    val_data_seed: int = 1
 
     training_seed: int = 42
     batch_size: int = 256
@@ -141,8 +145,8 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
             weights_summary=None,
         ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
 
-    wandb.run.summary["train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
-    wandb.run.summary["val_mse"] = _get_mse(dm.val_dataloader(shuffle=False))
+    wandb.run.summary["final_train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
+    wandb.run.summary["final_val_mse"] = _get_mse(dm.val_dataloader())
 
 
 def run_experiment(cfg: ExperimentConfig):
