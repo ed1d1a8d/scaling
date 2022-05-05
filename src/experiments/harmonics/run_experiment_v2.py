@@ -46,7 +46,7 @@ class ExperimentConfig:
 
     training_seed: int = 42
     batch_size: int = 256
-    patience_steps: int = 200
+    patience_steps: int = 1000
     num_workers: int = 0
 
     viz_samples: int = 512  # Number of side samples for visualizations
@@ -99,7 +99,9 @@ class CustomCallback(pl.Callback):
         self.pbar = tqdm()
 
     def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
-        md = {k: v.item() for k, v in trainer.logged_metrics.items()}
+        md = {k: v.item() for k, v in trainer.logged_metrics.items()} | {
+            "lr": trainer.optimizers[0].param_groups[0]["lr"]
+        }
         wandb.log(md)
 
         self.pbar.update()
