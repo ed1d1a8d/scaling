@@ -1,12 +1,12 @@
 import dataclasses
 import logging
+import math
 import os
 import warnings
 from typing import Union
 
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
-import src.utils as utils
 import wandb
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
@@ -73,8 +73,9 @@ class ExperimentConfig:
         )
 
     def get_net(self) -> FCNet:
-        steps_in_epoch = utils.ceil_div(self.n_train, self.batch_size)
-        patience_ub_in_epochs = utils.ceil_div(self.patience_steps, steps_in_epoch)
+        patience_ub_in_epochs = math.ceil(
+            self.patience_steps / (self.n_train / self.batch_size)
+        )
         return FCNet(
             dataclasses.replace(
                 self.net_cfg,
