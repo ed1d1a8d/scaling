@@ -11,10 +11,12 @@ REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
 def to_2d_image(
     pred_fn: Callable[[torch.Tensor], torch.Tensor],
     side_samples: int,
+    lo: float,
+    hi: float,
 ) -> torch.Tensor:
     """Should only be called on a pred_fn that takes 2d inputs."""
     s = slice(0, 1, 1j * side_samples)
-    XY = np.mgrid[s, s].T
+    XY = np.mgrid[s, s].T * (hi - lo) + lo
     img = pred_fn(torch.Tensor(XY))
     return img
 
@@ -22,10 +24,12 @@ def to_2d_image(
 def viz_2d(
     pred_fn: Callable[[torch.Tensor], torch.Tensor],
     side_samples: int,
+    lo: float,
+    hi: float,
 ) -> np.ndarray:
     """Should only be called on a pred_fn that takes 2d inputs."""
     with torch.no_grad():
-        img = to_2d_image(pred_fn, side_samples).numpy()
+        img = to_2d_image(pred_fn, side_samples, lo=lo, hi=hi).numpy()
     plt.imshow(img, origin="lower")
     return img
 

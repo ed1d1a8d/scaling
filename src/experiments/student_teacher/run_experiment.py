@@ -6,10 +6,14 @@ import warnings
 
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
+import torch
 import wandb
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from simple_parsing import ArgumentParser
-from src.experiments.harmonics.data import HypercubeDataModule
+from src.experiments.harmonics.data import (
+    HypercubeDataModule,
+    HypercubeDataModuleConfig,
+)
 from src.experiments.harmonics.fc_net import FCNet, FCNetConfig, HFReg
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
@@ -35,22 +39,24 @@ class ExperimentConfig:
         sched_verbose=True,
     )
 
-    n_train: int = 100
-    train_data_seed: int = 0
-
-    n_val: int = 1024
-    val_data_seed: int = 1
+    data_cfg: HypercubeDataModuleConfig = HypercubeDataModuleConfig(
+        input_dim=-1,
+        n_train=100,
+        n_val=1024,
+        num_workers=0,
+        batch_size=256,
+        cube_lo=-1,
+        cube_hi=1,
+    )
 
     training_seed: int = 42
-    batch_size: int = 256
     patience_steps: int = 1000
-    num_workers: int = 0
 
     viz_samples: int = 512  # Number of side samples for visualizations
     viz_pad: tuple[int, int] = (3, 3)  # Visualization padding
     viz_value: float = 0.42  # Vizualization value
 
-    tags: tuple[str, ...] = "test"
+    tags: tuple[str, ...] = ("test",)
 
     def __post_init__(self):
         assert sum(self.viz_pad) + 2 == self.input_dim
@@ -58,7 +64,7 @@ class ExperimentConfig:
     @property
     def net_cfg(self) -> FCNetConfig:
         patience_ub_in_epochs = math.ceil(
-            self.patience_steps / (self.n_train / self.batch_size)
+            self.patience_steps / (self.data_cfg.n_train / self.data_cfg.batch_size)
         )
         return dataclasses.replace(
             self.base_net_cfg,
@@ -80,8 +86,12 @@ class ExperimentConfig:
         return FCNet(
             dataclasses.replace(
                 self.net_cfg,
-                layer_widths=tuple(
-                    int(self.student_width_scale * w) for w in self.teacher_layer_widths
+                layer_widths=(
+                    *(
+                        int(self.student_width_scale * w)
+                        for w in self.teacher_layer_widths[:-1]
+                    ),
+                    1,
                 ),
             )
         )
@@ -89,12 +99,10 @@ class ExperimentConfig:
     def get_dm(self, net: FCNet) -> HypercubeDataModule:
         return HypercubeDataModule(
             fn=net,
-            input_dim=self.input_dim,
-            n_train=self.n_train,
-            train_seed=self.train_data_seed,
-            n_val=self.n_val,
-            val_seed=self.val_data_seed,
-            num_workers=self.num_workers,
+            cfg=dataclasses.replace(
+                self.data_cfg,
+                input_dim=self.input_dim,
+            ),
         )
 
 
@@ -103,6 +111,8 @@ def viz_to_wandb(cfg: ExperimentConfig, net: FCNet, viz_name: str):
         side_samples=cfg.viz_samples,
         pad=cfg.viz_pad,
         value=cfg.viz_value,
+        lo=cfg.data_cfg.cube_lo,
+        hi=cfg.data_cfg.cube_hi,
     )
     wandb.log({viz_name: plt.gcf()})
     plt.clf()
@@ -149,9 +159,6 @@ def train(dm: HypercubeDataModule, net: FCNet):
         datamodule=dm,
     )
 
-    # Save model checkpoint
-    trainer.save_checkpoint(os.path.join(wandb.run.dir, "net.ckpt"))
-
 
 def evaluate(dm: HypercubeDataModule, net: FCNet):
     def _get_mse(dl: DataLoader):
@@ -168,6 +175,7 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
 
 def run_experiment(cfg: ExperimentConfig):
     teacher_net = cfg.get_teacher_net()
+    torch.save(teacher_net.state_dict(), os.path.join(wandb.run.dir, "teacher.pt"))
     viz_to_wandb(cfg=cfg, net=teacher_net, viz_name="teacher")
 
     dm = cfg.get_dm(net=teacher_net)
@@ -179,6 +187,7 @@ def run_experiment(cfg: ExperimentConfig):
     pl.seed_everything(seed=cfg.training_seed, workers=True)
     train(dm, student_net)
 
+    torch.save(student_net.state_dict(), os.path.join(wandb.run.dir, "student.pt"))
     viz_to_wandb(cfg=cfg, net=student_net, viz_name="student_trained")
     evaluate(dm, student_net)
 

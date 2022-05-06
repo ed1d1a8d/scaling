@@ -141,6 +141,8 @@ class FCNet(pl.LightningModule):
         side_samples: int,
         pad: tuple[int, int] = (0, 0),
         value: float = 0.5,
+        lo: float = 0,
+        hi: float = 1,
     ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
         return utils.viz_2d(
@@ -148,4 +150,6 @@ class FCNet(pl.LightningModule):
                 F.pad(input=xs, pad=pad, mode="constant", value=value)
             ),
             side_samples=side_samples,
+            lo=lo,
+            hi=hi,
         )
