@@ -40,16 +40,17 @@ class HypercubeDataModule(pl.LightningDataModule):
             (n_samples, self.input_dim),
             generator=torch.Generator().manual_seed(seed),
         )
-        ys = torch.concat(
-            [
-                self.fn(batch[0])
-                for batch in DataLoader(
-                    TensorDataset(xs),
-                    batch_size=self.batch_size,
-                    shuffle=False,
-                )
-            ]
-        )
+        with torch.no_grad():
+            ys = torch.concat(
+                [
+                    self.fn(batch[0])
+                    for batch in DataLoader(
+                        TensorDataset(xs),
+                        batch_size=self.batch_size,
+                        shuffle=False,
+                    )
+                ]
+            )
         return TensorDataset(xs, ys)
 
     def setup(self, *_, **__):

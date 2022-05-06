@@ -1,0 +1,210 @@
+import dataclasses
+import logging
+import math
+import os
+import warnings
+
+import matplotlib.pyplot as plt
+import pytorch_lightning as pl
+import wandb
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from simple_parsing import ArgumentParser
+from src.experiments.harmonics.data import HypercubeDataModule
+from src.experiments.harmonics.fc_net import FCNet, FCNetConfig, HFReg
+from torch.utils.data.dataloader import DataLoader
+from tqdm.auto import tqdm
+
+logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+
+@dataclasses.dataclass
+class ExperimentConfig:
+    input_dim: int = 8
+
+    teacher_layer_widths: tuple[int, ...] = (96, 192, 1)
+    student_width_scale: float = 1.0
+    teacher_seed: int = 100
+    student_seed: int = 101
+
+    # input_dim and layer_widths are overriden for net_cfg
+    base_net_cfg = FCNetConfig(
+        high_freq_reg=HFReg.NONE,
+        sched_monitor="train_mse",
+        sched_verbose=True,
+    )
+
+    n_train: int = 100
+    train_data_seed: int = 0
+
+    n_val: int = 1024
+    val_data_seed: int = 1
+
+    training_seed: int = 42
+    batch_size: int = 256
+    patience_steps: int = 1000
+    num_workers: int = 0
+
+    viz_samples: int = 512  # Number of side samples for visualizations
+    viz_pad: tuple[int, int] = (3, 3)  # Visualization padding
+    viz_value: float = 0.42  # Vizualization value
+
+    tags: tuple[str, ...] = "test"
+
+    def __post_init__(self):
+        assert sum(self.viz_pad) + 2 == self.input_dim
+
+    @property
+    def net_cfg(self) -> FCNetConfig:
+        patience_ub_in_epochs = math.ceil(
+            self.patience_steps / (self.n_train / self.batch_size)
+        )
+        return dataclasses.replace(
+            self.base_net_cfg,
+            input_dim=self.input_dim,
+            sched_patience=patience_ub_in_epochs,
+        )
+
+    def get_teacher_net(self) -> FCNet:
+        pl.seed_everything(self.teacher_seed)
+        return FCNet(
+            dataclasses.replace(
+                self.net_cfg,
+                layer_widths=self.teacher_layer_widths,
+            )
+        )
+
+    def get_student_net(self) -> FCNet:
+        pl.seed_everything(self.student_seed)
+        return FCNet(
+            dataclasses.replace(
+                self.net_cfg,
+                layer_widths=tuple(
+                    int(self.student_width_scale * w) for w in self.teacher_layer_widths
+                ),
+            )
+        )
+
+    def get_dm(self, net: FCNet) -> HypercubeDataModule:
+        return HypercubeDataModule(
+            fn=net,
+            input_dim=self.input_dim,
+            n_train=self.n_train,
+            train_seed=self.train_data_seed,
+            n_val=self.n_val,
+            val_seed=self.val_data_seed,
+            num_workers=self.num_workers,
+        )
+
+
+def viz_to_wandb(cfg: ExperimentConfig, net: FCNet, viz_name: str):
+    net.viz_2d(
+        side_samples=cfg.viz_samples,
+        pad=cfg.viz_pad,
+        value=cfg.viz_value,
+    )
+    wandb.log({viz_name: plt.gcf()})
+    plt.clf()
+
+
+class CustomCallback(pl.Callback):
+    def __init__(self):
+        super().__init__()
+        self.pbar = tqdm()
+
+    def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
+        md = {k: v.item() for k, v in trainer.logged_metrics.items()} | {
+            "lr": trainer.optimizers[0].param_groups[0]["lr"]
+        }
+        wandb.log(md)
+
+        self.pbar.update()
+        self.pbar.set_description(f"train_mse={md['train_mse']: .6e}")
+
+
+def train(dm: HypercubeDataModule, net: FCNet):
+    trainer = pl.Trainer(
+        gpus=1,
+        deterministic=True,
+        logger=False,  # We do custom logging instead.
+        log_every_n_steps=1,
+        max_epochs=-1,
+        callbacks=[
+            CustomCallback(),
+            EarlyStopping(
+                monitor="train_loss",
+                patience=max(
+                    net.cfg.sched_patience + 10, int(1.5 * net.cfg.sched_patience)
+                ),
+                mode="min",
+            ),
+        ],
+        enable_progress_bar=False,
+        weights_summary=None,
+    )
+
+    trainer.fit(
+        model=net,
+        datamodule=dm,
+    )
+
+    # Save model checkpoint
+    trainer.save_checkpoint(os.path.join(wandb.run.dir, "net.ckpt"))
+
+
+def evaluate(dm: HypercubeDataModule, net: FCNet):
+    def _get_mse(dl: DataLoader):
+        return pl.Trainer(
+            gpus=1,
+            logger=False,
+            enable_progress_bar=False,
+            weights_summary=None,
+        ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
+
+    wandb.run.summary["final_train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
+    wandb.run.summary["final_val_mse"] = _get_mse(dm.val_dataloader())
+
+
+def run_experiment(cfg: ExperimentConfig):
+    teacher_net = cfg.get_teacher_net()
+    viz_to_wandb(cfg=cfg, net=teacher_net, viz_name="teacher")
+
+    dm = cfg.get_dm(net=teacher_net)
+    dm.setup()
+
+    student_net = cfg.get_student_net()
+    viz_to_wandb(cfg=cfg, net=student_net, viz_name="student_init")
+
+    pl.seed_everything(seed=cfg.training_seed, workers=True)
+    train(dm, student_net)
+
+    viz_to_wandb(cfg=cfg, net=student_net, viz_name="student_trained")
+    evaluate(dm, student_net)
+
+
+def main():
+    # Parse config
+    parser = ArgumentParser()
+    parser.add_arguments(ExperimentConfig, dest="experiment_config")
+    args = parser.parse_args()
+    cfg: ExperimentConfig = args.experiment_config
+
+    # Initialize wandb
+    wandb.init(
+        entity="data-frugal-learning",
+        project="student-teacher",
+        tags=cfg.tags,
+        config=dataclasses.asdict(cfg),
+        save_code=True,
+    )
+
+    # Save all ckpt files immediately
+    wandb.save("*.ckpt")
+
+    # Run experiment
+    run_experiment(cfg)
+
+
+if __name__ == "__main__":
+    main()

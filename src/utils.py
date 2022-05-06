@@ -48,7 +48,3 @@ def plot_errorbar(
         yerr=np.stack([mid - lo, hi - mid])[:, mid != np.nan],
         **plt_kwargs
     )
-
-def ceil_div(a: int, b: int) -> int:
-    assert a >= 0 and b > 0
-    return (a + b - 1) // b
