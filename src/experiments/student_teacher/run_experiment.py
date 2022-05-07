@@ -29,14 +29,21 @@ class ExperimentConfig:
 
     teacher_layer_widths: tuple[int, ...] = (96, 192, 1)
     student_width_scale: float = 1.0
-    teacher_seed: int = 100
+    teacher_seed: int = 49
     student_seed: int = 101
 
+    teacher_sparsity: float = 0.02
+    teacher_output_sparsity: float = 1
+
     # input_dim and layer_widths are overriden for net_cfg
-    base_net_cfg = FCNetConfig(
+    base_net_cfg: FCNetConfig = FCNetConfig(
         high_freq_reg=HFReg.NONE,
         sched_monitor="train_mse",
         sched_verbose=True,
+        l1_reg=True,
+        l1_reg_lambda=0,
+        l2_reg=True,
+        l2_reg_lambda=0,
     )
 
     data_cfg: HypercubeDataModuleConfig = HypercubeDataModuleConfig(
@@ -78,6 +85,8 @@ class ExperimentConfig:
             dataclasses.replace(
                 self.net_cfg,
                 layer_widths=self.teacher_layer_widths,
+                sparsity=self.teacher_sparsity,
+                output_sparsity=self.teacher_output_sparsity,
             )
         )
 
@@ -177,6 +186,10 @@ def run_experiment(cfg: ExperimentConfig):
     teacher_net = cfg.get_teacher_net()
     torch.save(teacher_net.state_dict(), os.path.join(wandb.run.dir, "teacher.pt"))
     viz_to_wandb(cfg=cfg, net=teacher_net, viz_name="teacher")
+    with torch.no_grad():
+        wandb.run.summary["teacher_l0_norm"] = teacher_net.get_l0_norm().item()
+        wandb.run.summary["teacher_l1_norm"] = teacher_net.get_l1_norm().item()
+        wandb.run.summary["teacher_l2_norm2"] = teacher_net.get_l2_norm2().item()
 
     dm = cfg.get_dm(net=teacher_net)
     dm.setup()

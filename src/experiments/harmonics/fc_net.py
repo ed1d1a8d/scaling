@@ -34,11 +34,19 @@ class FCNetConfig:
     layer_widths: tuple[int, ...] = (96, 192, 1)
     act: ActivationT = ActivationT.RELU
 
+    sparsity: float = 1
+    output_sparsity: float = 0.5
+
     high_freq_reg: HFReg = HFReg.MCLS
     high_freq_lambda: float = 0
     high_freq_freq_limit: int = 0
     high_freq_mcls_samples: int = 1024
     high_freq_dft_ss: int = 8
+
+    l1_reg: bool = False
+    l1_reg_lambda: float = 0
+    l2_reg: bool = False
+    l2_reg_lambda: float = 0
 
     learning_rate: float = 1e-3
     sched_monitor: str = "train_mse"
@@ -46,6 +54,9 @@ class FCNetConfig:
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6
     sched_verbose: bool = False
+
+    def __post_init__(self):
+        assert 0 < self.sparsity <= 1
 
 
 class FCNet(pl.LightningModule):
@@ -73,10 +84,29 @@ class FCNet(pl.LightningModule):
         self.net = nn.Sequential(*_layers)
         mup.set_base_shapes(self.net, None)
 
+        if self.cfg.sparsity < 1:
+            with torch.no_grad():
+                # Prune everything but output layer
+                for param in self.net[:-1].parameters():
+                    param.multiply_((torch.rand_like(param) <= self.cfg.sparsity))
+                for param in self.net[-1].parameters():
+                    param.multiply_(
+                        (torch.rand_like(param) <= self.cfg.output_sparsity)
+                    )
+
         self.save_hyperparameters()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         return torch.squeeze(self.net(x), dim=-1)
+
+    def get_l0_norm(self) -> torch.Tensor:
+        return sum(p.sign().abs().sum() for p in self.net.parameters())
+
+    def get_l1_norm(self) -> torch.Tensor:
+        return sum(p.abs().sum() for p in self.net.parameters())
+
+    def get_l2_norm2(self) -> torch.Tensor:
+        return sum(p.square().sum() for p in self.net.parameters())
 
     def _step_helper(self, batch, log_prefix: str) -> torch.Tensor:
         x, y = batch
@@ -106,7 +136,21 @@ class FCNet(pl.LightningModule):
             raise ValueError(self.cfg.high_freq_reg)
         self.log(f"{log_prefix}hfn", hfn)
 
-        loss = mse + self.cfg.high_freq_lambda * hfn
+        with torch.no_grad():
+            self.log(f"{log_prefix}l0_norm", self.get_l0_norm())
+
+        l1_norm = self.get_l1_norm() if self.cfg.l1_reg else 0
+        self.log(f"{log_prefix}l1_norm", l1_norm)
+
+        l2_norm2 = self.get_l2_norm2() if self.cfg.l2_reg else 0
+        self.log(f"{log_prefix}l2_norm2", l2_norm2)
+
+        loss = (
+            mse
+            + self.cfg.high_freq_lambda * hfn
+            + self.cfg.l1_reg_lambda * l1_norm
+            + self.cfg.l2_reg_lambda * l2_norm2
+        )
         self.log(f"{log_prefix}loss", loss)
 
         return loss
