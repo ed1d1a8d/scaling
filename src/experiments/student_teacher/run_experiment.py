@@ -29,31 +29,35 @@ class ExperimentConfig:
 
     teacher_layer_widths: tuple[int, ...] = (96, 192, 1)
     student_width_scale: float = 1.0
-    teacher_seed: int = 49
+    teacher_seed: int = 100
     student_seed: int = 101
 
-    teacher_sparsity: float = 0.02
+    teacher_sparsity: float = 0.05
     teacher_output_sparsity: float = 1
 
     # input_dim and layer_widths are overriden for net_cfg
-    base_net_cfg: FCNetConfig = FCNetConfig(
-        high_freq_reg=HFReg.NONE,
-        sched_monitor="train_mse",
-        sched_verbose=True,
-        l1_reg=True,
-        l1_reg_lambda=0,
-        l2_reg=True,
-        l2_reg_lambda=0,
+    base_net_cfg: FCNetConfig = dataclasses.field(
+        default_factory=lambda: FCNetConfig(
+            high_freq_reg=HFReg.NONE,
+            sched_monitor="train_mse",
+            sched_verbose=True,
+            l1_reg=True,
+            l1_reg_lambda=3e-7,
+            l2_reg=True,
+            l2_reg_lambda=0,
+        )
     )
 
-    data_cfg: HypercubeDataModuleConfig = HypercubeDataModuleConfig(
-        input_dim=-1,
-        n_train=100,
-        n_val=1024,
-        num_workers=0,
-        batch_size=256,
-        cube_lo=-1,
-        cube_hi=1,
+    data_cfg: HypercubeDataModuleConfig = dataclasses.field(
+        default_factory=lambda: HypercubeDataModuleConfig(
+            input_dim=-1,
+            n_train=100,
+            n_val=1024,
+            num_workers=0,
+            batch_size=256,
+            cube_lo=-1,
+            cube_hi=1,
+        )
     )
 
     training_seed: int = 42
@@ -127,19 +131,27 @@ def viz_to_wandb(cfg: ExperimentConfig, net: FCNet, viz_name: str):
     plt.clf()
 
 
-class CustomCallback(pl.Callback):
-    def __init__(self):
+class CustomLogger(pl.Callback):
+    def __init__(self, log_every_n_steps: int):
         super().__init__()
         self.pbar = tqdm()
 
-    def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
-        md = {k: v.item() for k, v in trainer.logged_metrics.items()} | {
-            "lr": trainer.optimizers[0].param_groups[0]["lr"]
-        }
-        wandb.log(md)
+        self.log_every_n_batches = log_every_n_steps
+        self.n_batches_seen = 0
 
-        self.pbar.update()
-        self.pbar.set_description(f"train_mse={md['train_mse']: .6e}")
+    def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
+        self.n_batches_seen += 1
+        if self.n_batches_seen % self.log_every_n_batches == 0:
+            md = {k: v.item() for k, v in trainer.logged_metrics.items()} | {
+                "lr": trainer.optimizers[0].param_groups[0]["lr"],
+                "n_batches_seen": self.n_batches_seen,
+            }
+            wandb.log(md)
+
+            self.pbar.update(self.log_every_n_batches)
+            self.pbar.set_description(
+                f"tr.loss={md['train_loss']: .6e}; tr.mse={md['train_mse']: .6e}"
+            )
 
 
 def train(dm: HypercubeDataModule, net: FCNet):
@@ -147,10 +159,9 @@ def train(dm: HypercubeDataModule, net: FCNet):
         gpus=1,
         deterministic=True,
         logger=False,  # We do custom logging instead.
-        log_every_n_steps=1,
         max_epochs=-1,
         callbacks=[
-            CustomCallback(),
+            CustomLogger(log_every_n_steps=10),
             EarlyStopping(
                 monitor="train_loss",
                 patience=max(
@@ -195,6 +206,8 @@ def run_experiment(cfg: ExperimentConfig):
     dm.setup()
 
     student_net = cfg.get_student_net()
+    student_net.cfg.l1_reg_lim = teacher_net.get_l1_norm().item()
+    student_net.cfg.l2_reg_lim = teacher_net.get_l2_norm2().item()
     viz_to_wandb(cfg=cfg, net=student_net, viz_name="student_init")
 
     pl.seed_everything(seed=cfg.training_seed, workers=True)

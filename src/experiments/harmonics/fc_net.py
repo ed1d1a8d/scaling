@@ -43,10 +43,15 @@ class FCNetConfig:
     high_freq_mcls_samples: int = 1024
     high_freq_dft_ss: int = 8
 
+    l0_clip: float = 1e-6
+
     l1_reg: bool = False
     l1_reg_lambda: float = 0
+    l1_reg_lim: float = 0
+
     l2_reg: bool = False
     l2_reg_lambda: float = 0
+    l2_reg_lim: float = 0  # l2_norm2
 
     learning_rate: float = 1e-3
     sched_monitor: str = "train_mse"
@@ -100,7 +105,7 @@ class FCNet(pl.LightningModule):
         return torch.squeeze(self.net(x), dim=-1)
 
     def get_l0_norm(self) -> torch.Tensor:
-        return sum(p.sign().abs().sum() for p in self.net.parameters())
+        return sum((p.abs() > self.cfg.l0_clip).sum() for p in self.net.parameters())
 
     def get_l1_norm(self) -> torch.Tensor:
         return sum(p.abs().sum() for p in self.net.parameters())
@@ -148,8 +153,8 @@ class FCNet(pl.LightningModule):
         loss = (
             mse
             + self.cfg.high_freq_lambda * hfn
-            + self.cfg.l1_reg_lambda * l1_norm
-            + self.cfg.l2_reg_lambda * l2_norm2
+            + self.cfg.l1_reg_lambda * torch.relu(l1_norm - self.cfg.l1_reg_lim)
+            + self.cfg.l2_reg_lambda * torch.relu(l2_norm2 - self.cfg.l2_reg_lim)
         )
         self.log(f"{log_prefix}loss", loss)
 
