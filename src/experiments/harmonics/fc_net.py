@@ -38,13 +38,18 @@ class MinNormOptConfig:
     """
 
     enabled: bool = False
-    n_samples: int = 0
+    n_samples: Optional[int] = None
 
     # Better to be on the larger side? (see section 3.2.2)
-    alpha_lr: float = 1e-1
+    alpha_lr: float = 1
 
     # For stabilization, better to be small (see section 3.2.2)
-    l2_reg_lambda: float = 1e-6
+    l2_reg_lambda: float = 1e-5
+
+    def __post_init__(self):
+        if self.enabled:
+            assert self.n_samples is not None
+            assert self.n_samples > 0
 
 
 @dataclasses.dataclass
@@ -145,7 +150,13 @@ class FCNet(pl.LightningModule):
         log_prefix: str,
         optimizer_idx: Optional[int] = None,
     ) -> torch.Tensor:
-        """Algorithm 1 from https://arxiv.org/pdf/1806.00730.pdf."""
+        """
+        Based on algorithm 1 from https://arxiv.org/pdf/1806.00730.pdf.
+
+        Our modifications:
+            - We average instead of summing across the batch dimension, to
+              match the behavior of mse_loss.
+        """
         mn_cfg = self.cfg.minnorm_cfg
 
         x, y, idx = batch
@@ -164,16 +175,18 @@ class FCNet(pl.LightningModule):
             # TODO: Also support minimum l1 norm solution
             loss_w = (
                 l2_norm2
-                + (self.alphas[idx] * (y - y_hat)).sum()
-                + mn_cfg.l2_reg_lambda * (y - y_hat).square().sum()
+                + (self.alphas[idx] * (y - y_hat)).mean()
+                + mn_cfg.l2_reg_lambda * mse
             )
             self.log(f"{log_prefix}loss_w", loss_w)
             return loss_w
 
         # Optimize alphas
-        if optimizer_idx == 0:
-            loss_a = self.alphas[idx] * (y - y_hat).sum()
+        if optimizer_idx == 1:
+            loss_a = -(self.alphas[idx] * (y - y_hat)).mean()
             self.log(f"{log_prefix}loss_a", loss_a)
+
+            self.log(f"{log_prefix}alpha_avg", self.alphas.abs().mean())
             return loss_a
 
     def _step_helper(
@@ -263,7 +276,7 @@ class FCNet(pl.LightningModule):
         if self.cfg.minnorm_cfg.enabled:
             opt_w = opt
             opt_a = optim.SGD([self.alphas], lr=self.cfg.minnorm_cfg.alpha_lr)
-            return [opt, opt_a], [sched_config]
+            return [opt_w, opt_a], [sched_config]
         else:
             return [opt], [sched_config]
 

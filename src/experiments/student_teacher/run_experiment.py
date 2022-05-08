@@ -35,6 +35,8 @@ class ExperimentConfig:
     teacher_sparsity: float = 0.05
     teacher_output_sparsity: float = 1
 
+    use_minnorm_opt: bool = False
+
     # input_dim and layer_widths are overriden for net_cfg
     base_net_cfg: FCNetConfig = dataclasses.field(
         default_factory=lambda: FCNetConfig(
@@ -106,6 +108,11 @@ class ExperimentConfig:
                     ),
                     1,
                 ),
+                minnorm_cfg=dataclasses.replace(
+                    self.net_cfg.minnorm_cfg,
+                    enabled=self.use_minnorm_opt,
+                    n_samples=self.data_cfg.n_train,
+                ),
             )
         )
 
@@ -115,6 +122,7 @@ class ExperimentConfig:
             cfg=dataclasses.replace(
                 self.data_cfg,
                 input_dim=self.input_dim,
+                include_indices=self.use_minnorm_opt,
             ),
         )
 
@@ -132,12 +140,18 @@ def viz_to_wandb(cfg: ExperimentConfig, net: FCNet, viz_name: str):
 
 
 class CustomLogger(pl.Callback):
-    def __init__(self, log_every_n_steps: int):
+    def __init__(
+        self,
+        log_every_n_steps: int,
+        loss_key: str,
+    ):
         super().__init__()
-        self.pbar = tqdm()
-
         self.log_every_n_batches = log_every_n_steps
         self.n_batches_seen = 0
+
+        self.loss_key = loss_key
+
+        self.pbar = tqdm()
 
     def on_train_batch_end(self, trainer: pl.Trainer, *_, **__):
         self.n_batches_seen += 1
@@ -150,7 +164,7 @@ class CustomLogger(pl.Callback):
 
             self.pbar.update(self.log_every_n_batches)
             self.pbar.set_description(
-                f"tr.loss={md['train_loss']: .6e}; tr.mse={md['train_mse']: .6e}"
+                f"tr.loss={md[self.loss_key]: .6e}; tr.mse={md['train_mse']: .6e}"
             )
 
 
@@ -161,9 +175,9 @@ def train(dm: HypercubeDataModule, net: FCNet):
         logger=False,  # We do custom logging instead.
         max_epochs=-1,
         callbacks=[
-            CustomLogger(log_every_n_steps=10),
+            CustomLogger(log_every_n_steps=10, loss_key=net.cfg.sched_monitor),
             EarlyStopping(
-                monitor="train_loss",
+                monitor=net.cfg.sched_monitor,
                 patience=max(
                     net.cfg.sched_patience + 10, int(1.5 * net.cfg.sched_patience)
                 ),
