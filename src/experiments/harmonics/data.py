@@ -23,6 +23,9 @@ class HypercubeDataModuleConfig:
     cube_lo: float = 0.0
     cube_hi: float = 1.0
 
+    # Used by minnorm training
+    include_indices: bool = False
+
     def __post_init__(self):
         assert self.cube_lo <= self.cube_hi
 
@@ -57,6 +60,9 @@ class HypercubeDataModule(pl.LightningDataModule):
                     )
                 ]
             )
+
+        if self.cfg.include_indices:
+            return TensorDataset(xs, ys, torch.arange(n_samples))
         return TensorDataset(xs, ys)
 
     def setup(self, *_, **__):

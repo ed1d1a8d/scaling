@@ -1,15 +1,15 @@
 import dataclasses
 import enum
+from typing import Optional
 
-import numpy as np
 import mup
+import numpy as np
 import pytorch_lightning as pl
 import src.experiments.harmonics.bw_loss as bw_loss
 import src.utils as utils
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import mup
+from torch import nn, optim
 
 
 class HFReg(enum.Enum):
@@ -26,6 +26,25 @@ class SinActivation(nn.Module):
 class ActivationT(enum.Enum):
     RELU = nn.ReLU
     SIN = SinActivation
+
+
+@dataclasses.dataclass
+class MinNormOptConfig:
+    """
+    Configuration for minnorm optimization,
+    as described in https://arxiv.org/abs/1806.00730.
+
+    Some hyperparemeters for MNIST are given in appendix D.
+    """
+
+    enabled: bool = False
+    n_samples: int = 0
+
+    # Better to be on the larger side? (see section 3.2.2)
+    alpha_lr: float = 1e-1
+
+    # For stabilization, better to be small (see section 3.2.2)
+    l2_reg_lambda: float = 1e-6
 
 
 @dataclasses.dataclass
@@ -52,6 +71,10 @@ class FCNetConfig:
     l2_reg: bool = False
     l2_reg_lambda: float = 0
     l2_reg_lim: float = 0  # l2_norm2
+
+    minnorm_cfg: MinNormOptConfig = dataclasses.field(
+        default_factory=lambda: MinNormOptConfig()
+    )
 
     learning_rate: float = 1e-3
     sched_monitor: str = "train_mse"
@@ -99,6 +122,9 @@ class FCNet(pl.LightningModule):
                         (torch.rand_like(param) <= self.cfg.output_sparsity)
                     )
 
+        if self.cfg.minnorm_cfg.enabled:
+            self.alphas = nn.Parameter(torch.zeros(self.cfg.minnorm_cfg.n_samples))
+
         self.save_hyperparameters()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
@@ -113,7 +139,56 @@ class FCNet(pl.LightningModule):
     def get_l2_norm2(self) -> torch.Tensor:
         return sum(p.square().sum() for p in self.net.parameters())
 
-    def _step_helper(self, batch, log_prefix: str) -> torch.Tensor:
+    def _minnorm_step_helper(
+        self,
+        batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+        log_prefix: str,
+        optimizer_idx: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Algorithm 1 from https://arxiv.org/pdf/1806.00730.pdf."""
+        mn_cfg = self.cfg.minnorm_cfg
+
+        x, y, idx = batch
+        y_hat = self.forward(x)
+        mse = F.mse_loss(input=y_hat, target=y)
+        self.log(f"{log_prefix}mse", mse)
+
+        if optimizer_idx is None:
+            return
+
+        # Optimize weights
+        if optimizer_idx == 0:
+            l2_norm2 = self.get_l2_norm2()
+            self.log(f"{log_prefix}l2_norm2", l2_norm2)
+
+            # TODO: Also support minimum l1 norm solution
+            loss_w = (
+                l2_norm2
+                + (self.alphas[idx] * (y - y_hat)).sum()
+                + mn_cfg.l2_reg_lambda * (y - y_hat).square().sum()
+            )
+            self.log(f"{log_prefix}loss_w", loss_w)
+            return loss_w
+
+        # Optimize alphas
+        if optimizer_idx == 0:
+            loss_a = self.alphas[idx] * (y - y_hat).sum()
+            self.log(f"{log_prefix}loss_a", loss_a)
+            return loss_a
+
+    def _step_helper(
+        self,
+        batch,
+        log_prefix: str,
+        optimizer_idx: Optional[int] = None,
+    ) -> torch.Tensor:
+        if self.cfg.minnorm_cfg.enabled:
+            return self._minnorm_step_helper(
+                batch=batch,
+                log_prefix=log_prefix,
+                optimizer_idx=optimizer_idx,
+            )
+
         x, y = batch
         y_hat = self(x)
         mse = F.mse_loss(input=y_hat, target=y)
@@ -160,8 +235,10 @@ class FCNet(pl.LightningModule):
 
         return loss
 
-    def training_step(self, batch, *_, **__):
-        return self._step_helper(batch=batch, log_prefix="train_")
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        return self._step_helper(
+            batch=batch, log_prefix="train_", optimizer_idx=optimizer_idx
+        )
 
     def validation_step(self, batch, *_, **__):
         self._step_helper(batch=batch, log_prefix="val_")
@@ -170,7 +247,7 @@ class FCNet(pl.LightningModule):
         self._step_helper(batch=batch, log_prefix="test_")
 
     def configure_optimizers(self):
-        opt = mup.MuAdam(self.parameters(), lr=self.cfg.learning_rate)
+        opt = mup.MuAdam(self.net.parameters(), lr=self.cfg.learning_rate)
         sched_config = dict(
             scheduler=torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer=opt,
@@ -183,7 +260,12 @@ class FCNet(pl.LightningModule):
             monitor=self.cfg.sched_monitor,
         )
 
-        return [opt], [sched_config]
+        if self.cfg.minnorm_cfg.enabled:
+            opt_w = opt
+            opt_a = optim.SGD([self.alphas], lr=self.cfg.minnorm_cfg.alpha_lr)
+            return [opt, opt_a], [sched_config]
+        else:
+            return [opt], [sched_config]
 
     def viz_2d(
         self,
