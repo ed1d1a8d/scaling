@@ -24,6 +24,8 @@ class HarmonicFnConfig:
     num_components: int
     seed: int = 42
 
+    dtype: torch.dtype = torch.float32
+
 
 @typechecked
 class HarmonicFn(pl.LightningModule):
@@ -58,6 +60,7 @@ class HarmonicFn(pl.LightningModule):
                     mean=0,
                     std=1,
                     generator=rng,
+                    dtype=cfg.dtype,
                 ),
             )
             if coeffs is None
@@ -72,9 +75,9 @@ class HarmonicFn(pl.LightningModule):
                 low=-cfg.freq_limit,
                 high=cfg.freq_limit + 1,
                 generator=rng,
-            ).float()
+            ).type(cfg.dtype)
             if freqs is None
-            else freqs.float(),
+            else freqs.type(cfg.dtype),
             requires_grad=requires_grad,
         )
         assert self.freqs.shape == (cfg.num_components, cfg.input_dim)
@@ -86,6 +89,7 @@ class HarmonicFn(pl.LightningModule):
             * torch.rand(
                 size=(cfg.num_components,),
                 generator=rng,
+                dtype=cfg.dtype,
             )
             if phases is None
             else phases,
@@ -95,10 +99,12 @@ class HarmonicFn(pl.LightningModule):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
         assert x.shape[-1] == self.cfg.input_dim
-
         # Could also do exp
         return (
-            torch.cos(2 * torch.pi * x @ self.freqs.T + self.phases.reshape(1, -1))
+            torch.cos(
+                2 * torch.pi * x.type(self.cfg.dtype) @ self.freqs.T
+                + self.phases.reshape(1, -1)
+            )
             @ self.coeffs
         )
 
@@ -111,15 +117,19 @@ class HarmonicFn(pl.LightningModule):
     def viz_2d(
         self,
         side_samples: int,
-        pad: tuple[int, int] = (1, 5),
+        pad: tuple[int, int] = (0, 0),
         value: float = 0.5,
+        lo: float = 0,
+        hi: float = 1,
     ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        return utils.viz_2d(
-            pred_fn=lambda xs: self.forward(
-                F.pad(input=xs, pad=pad, mode="constant", value=value)
-            ),
+        return utils.viz_2d_hd(
+            pred_fn=self.forward,
             side_samples=side_samples,
+            pad=pad,
+            value=value,
+            lo=lo,
+            hi=hi,
         )
 
     @staticmethod
@@ -170,6 +180,7 @@ class HarmonicFn(pl.LightningModule):
         freq_limit: int,
         lamb: float = 1e-4,
         coeff_threshold: float = 1e-6,
+        dtype: torch.dtype = torch.float32,
     ) -> HarmonicFn:
         assert ys.shape == xs.shape[:1]
         assert len(xs.shape) == 2
@@ -195,7 +206,7 @@ class HarmonicFn(pl.LightningModule):
         cos_coeffs = all_coeffs[:num_freqs]
         sin_coeffs = np.pad(all_coeffs[num_freqs:], (1, 0))
 
-        coeffs = np.sqrt(cos_coeffs ** 2 + sin_coeffs ** 2)
+        coeffs = np.sqrt(cos_coeffs**2 + sin_coeffs**2)
         phases = np.arctan2(-sin_coeffs, cos_coeffs)
 
         # cos(x + p) = cos(p) cos(x) - sin(p) sin(x)
@@ -212,10 +223,11 @@ class HarmonicFn(pl.LightningModule):
                 input_dim=D,
                 freq_limit=int(sparse_freqs.max()),
                 num_components=len(sparse_coeffs),
+                dtype=dtype,
             ),
-            coeffs=torch.tensor(sparse_coeffs).float(),
+            coeffs=torch.tensor(sparse_coeffs).type(dtype),
             freqs=torch.tensor(sparse_freqs, dtype=torch.long),
-            phases=torch.tensor(sparse_phases).float(),
+            phases=torch.tensor(sparse_phases).type(dtype),
         )
 
 

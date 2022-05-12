@@ -289,11 +289,11 @@ class FCNet(pl.LightningModule):
         hi: float = 1,
     ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        return utils.viz_2d(
-            pred_fn=lambda xs: self.forward(
-                F.pad(input=xs, pad=pad, mode="constant", value=value)
-            ),
+        return utils.viz_2d_hd(
+            pred_fn=self.forward,
             side_samples=side_samples,
+            pad=pad,
+            value=value,
             lo=lo,
             hi=hi,
         )

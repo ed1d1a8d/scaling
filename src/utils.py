@@ -4,6 +4,7 @@ from typing import Callable
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -32,6 +33,25 @@ def viz_2d(
         img = to_2d_image(pred_fn, side_samples, lo=lo, hi=hi).numpy()
     plt.imshow(img, origin="lower")
     return img
+
+
+def viz_2d_hd(
+    pred_fn: Callable[[torch.Tensor], torch.Tensor],
+    side_samples: int,
+    pad: tuple[int, int] = (0, 0),
+    value: float = 0.5,
+    lo: float = 0,
+    hi: float = 1,
+) -> np.ndarray:
+    """Can be called on a pred_fn that takes high dimensional inputs."""
+    return viz_2d(
+        pred_fn=lambda xs: pred_fn(
+            F.pad(input=xs, pad=pad, mode="constant", value=value)
+        ),
+        side_samples=side_samples,
+        lo=lo,
+        hi=hi,
+    )
 
 
 def plot_errorbar(

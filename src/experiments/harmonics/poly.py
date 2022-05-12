@@ -139,15 +139,19 @@ class ChebPoly(pl.LightningModule):
     def viz_2d(
         self,
         side_samples: int,
-        pad: tuple[int, int] = (1, 5),
+        pad: tuple[int, int] = (0, 0),
         value: float = 0.5,
+        lo: float = 0,
+        hi: float = 1,
     ) -> np.ndarray:
         assert sum(pad) + 2 == self.cfg.input_dim
-        return utils.viz_2d(
-            pred_fn=lambda xs: self.forward(
-                F.pad(input=xs, pad=pad, mode="constant", value=value)
-            ),
+        return utils.viz_2d_hd(
+            pred_fn=self.forward,
             side_samples=side_samples,
+            pad=pad,
+            value=value,
+            lo=lo,
+            hi=hi,
         )
 
     @classmethod
@@ -211,7 +215,11 @@ class ChebPoly(pl.LightningModule):
             - cheb_reg_Phi
         )
         cheb_coeffs = np.linalg.solve(
-            a=(cheb_Phi.T @ cheb_Phi + hf_lambda * Q_reg.T @ Q_reg + l2_lambda * cheb_reg_Phi.T @ cheb_reg_Phi),
+            a=(
+                cheb_Phi.T @ cheb_Phi
+                + hf_lambda * Q_reg.T @ Q_reg
+                + l2_lambda * cheb_reg_Phi.T @ cheb_reg_Phi
+            ),
             b=cheb_Phi.T @ ys,
         )
 
