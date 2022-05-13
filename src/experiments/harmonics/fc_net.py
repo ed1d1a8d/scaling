@@ -41,7 +41,7 @@ class FCNetConfig:
     high_freq_dft_ss: int = 8
 
     learning_rate: float = 1e-3
-    sched_monitor: str = "train_mse"
+    sched_monitor: str = "train_loss"
     sched_patience: int = 25
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6

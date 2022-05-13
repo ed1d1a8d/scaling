@@ -38,11 +38,11 @@ function waitUntilNJobsRemain() {
 }
 
 # Experiment loop
-n_trains=(32 50 80 100 128 200 400 800 1600 3200 6400 10000 20000 40000 80000)
+n_trains=(32 50 80 100 128 200 400 800 1600 3200 6400 10000 20000 40000 80000 100000 200000 400000)
 for n_train in "\${n_trains[@]}"
 do
-  # Run 3 experiments in parallel
-  waitUntilNJobsRemain 3
+  # Run 4 experiments in parallel
+  waitUntilNJobsRemain 4
 
   # Run experiment
   { python -m src.experiments.harmonics.run_experiment_v2 --n_train \$n_train $@; } &
