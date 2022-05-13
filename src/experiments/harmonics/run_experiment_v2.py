@@ -128,6 +128,7 @@ def train(dm: HypercubeDataModule, net: FCNet):
         ],
         enable_progress_bar=False,
         weights_summary=None,
+        enable_checkpointing=False,
     )
 
     trainer.fit(
@@ -146,6 +147,7 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
             logger=False,
             enable_progress_bar=False,
             weights_summary=None,
+            enable_checkpointing=False,
         ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
 
     wandb.run.summary["final_train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
