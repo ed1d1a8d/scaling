@@ -86,7 +86,7 @@ class FCNetConfig:
     sched_patience: int = 25
     sched_decay: float = 0.1
     sched_min_lr: float = 1e-6
-    sched_verbose: bool = False
+    sched_verbose: bool = True
 
     def __post_init__(self):
         assert 0 < self.sparsity <= 1
