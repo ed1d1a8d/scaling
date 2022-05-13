@@ -29,13 +29,15 @@ class ExperimentConfig:
         num_components=16,
     )
 
+    net_width: int = 512
     net_cfg: FCNetConfig = FCNetConfig(
         high_freq_reg=HFReg.NONE,
-        layer_widths=(512, 512, 512, 1),
+        layer_widths=(),
         sched_verbose=True,
         high_freq_freq_limit=2,
         high_freq_lambda=1,
         high_freq_mcls_samples=20_000,
+        sched_monitor="train_loss",
     )
 
     n_train: int = 100
@@ -79,6 +81,7 @@ class ExperimentConfig:
         return FCNet(
             dataclasses.replace(
                 self.net_cfg,
+                layer_widths=(self.net_width, self.net_width, self.net_width, 1),
                 sched_patience=patience_ub_in_epochs,
             )
         )
@@ -119,9 +122,10 @@ def train(dm: HypercubeDataModule, net: FCNet):
         callbacks=[
             CustomCallback(),
             EarlyStopping(
-                monitor="train_loss",
+                monitor=net.cfg.sched_monitor,
                 patience=max(
-                    net.cfg.sched_patience + 10, int(1.5 * net.cfg.sched_patience)
+                    net.cfg.sched_patience + 10,
+                    int(1.5 * net.cfg.sched_patience),
                 ),
                 mode="min",
             ),
