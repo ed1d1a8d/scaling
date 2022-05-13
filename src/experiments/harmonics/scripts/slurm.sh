@@ -24,11 +24,33 @@ conda activate scaling
 source scripts/rand-mallory.sh
 { mallory -config \$TMP_MALLORY_CONFIG; } &
 
-# Run experiment
-{ python -m src.experiments.harmonics.run_experiment_v2 $@; } &
+# Utility function that waits until n background jobs are left running
+# First argument is n
+function waitUntilNJobsRemain() {
+  local n_jobs=\$(jobs -rp | wc -l)
+  echo "Waiting on \$n_jobs background jobs until \$1 jobs left..."
+  while [[ \$n_jobs -gt \$1 ]]; do
+    n_jobs=\$(jobs -rp | wc -l)
+    echo -n "."
+    sleep 1
+  done
+  echo ""
+}
 
-# Wait till experiment finishes, then kill mallory
-# See https://unix.stackexchange.com/a/231678/466333 for details.
-wait -n
+# Experiment loop
+n_trains=(32 50 80 100 128 200 400 800 1600 3200 6400 10000 20000 40000 80000)
+for n_train in "\${n_trains[@]}"
+do
+  # Run 3 experiments in parallel
+  waitUntilNJobsRemain 3
+
+  # Run experiment
+  { python -m src.experiments.harmonics.run_experiment_v2 --n_train \$n_train $@; } &
+done
+
+# Wait until all experiments finish.
+waitUntilNJobsRemain 1
+
+# Then kill mallory
 pkill -P \$\$
 EOT
