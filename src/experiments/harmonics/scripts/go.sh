@@ -3,15 +3,19 @@
 # This script should be launched from the root of the repository, i.e.
 # ./src/experiments/harmonics/scripts/go.sh
 
-n_trains=(32 50 80 100 128 200 400 800 1600 3200 6400 10000 20000 40000 80000)
-regs=(MCLS NONE)
-for n_train in "${n_trains[@]}"
-do
-  for reg in "${regs[@]}"
-  do
+widths=(128 256)
+freq_limits=(2 4 6)
+for width in "${widths[@]}"; do
+  for hffl in "${freq_limits[@]}"; do
     ./src/experiments/harmonics/scripts/slurm.sh \
-      --n_train $n_train \
-      --high_freq_reg $reg \
+      --layer_widths $width $width $width 1 \
+      --high_freq_reg MCLS \
+      --high_freq_freq_limit $hffl \
       --tags nn
   done
+
+  ./src/experiments/harmonics/scripts/slurm.sh \
+    --layer_widths $width $width $width 1 \
+    --high_freq_reg NONE \
+    --tags nn
 done
