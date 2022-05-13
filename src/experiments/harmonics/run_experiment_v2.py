@@ -55,7 +55,7 @@ class ExperimentConfig:
     viz_pad: tuple[int, int] = (0, 0)  # Visualization padding
     viz_value: float = 0.42  # Vizualization value
 
-    tags: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ("test",)
 
     def __post_init__(self):
         assert self.hf_cfg.input_dim == self.net_cfg.input_dim
