@@ -5,7 +5,6 @@ mlruns
 slurm-logs
 lightning_logs
 wandb
-data
 
 *.pyc
 
@@ -17,3 +16,7 @@ notebooks/plots
 
 # pytorchlightning
 checkpoints
+
+# data files
+*.npz
+*.beton

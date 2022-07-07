@@ -1,47 +1,48 @@
-# Python 3.9.12
-
 # Torch
---find-links https://download.pytorch.org/whl/cu113/torch_stable.html
-torch==1.10.0+cu113; sys_platform != 'darwin'
-torchvision==0.11.1+cu113; sys_platform != 'darwin'
-torchaudio==0.10.0+cu113; sys_platform != 'darwin'
+--find-links https://download.pytorch.org/whl/cu113
+torch==1.12.0; sys_platform != 'darwin'
+torchvision==0.13.0; sys_platform != 'darwin'
+torchaudio==0.12.0; sys_platform != 'darwin'
 
-torch==1.10.0; sys_platform == 'darwin'
-torchvision==0.11.1; sys_platform == 'darwin'
-torchaudio==0.10.0; sys_platform == 'darwin'
+torch==1.12.0; sys_platform == 'darwin'
+torchvision==0.13.0; sys_platform == 'darwin'
+torchaudio==0.12.0; sys_platform == 'darwin'
 
 # Jax
 --find-links https://storage.googleapis.com/jax-releases/jax_releases.html
 jax[cuda11_cudnn805]; sys_platform != 'darwin'
 jax[cpu]; sys_platform == 'darwin'
 
+# FFCV
+ffcv
+numba
+
+# Adversarial example things
+torchattacks
+
 # Other deep learning libraries
-einops==0.3.2
-pytorch-lightning==1.5.5
-torchtyping==0.1.4
-neural-tangents==0.3.9
-mup==1.0.0
+einops
+pytorch-lightning
+torchtyping
+neural-tangents
+mup
 
 # Configuration parsing
-simple_parsing==0.0.19.post1
+simple-parsing
 
 # Other computational libraries
-matplotlib==3.5.0
-pandas==1.3.4
+matplotlib
+pandas
 
 # Experiment management
-wandb==0.12.16
+wandb
 
 # Utilities
-black==22.3.0
-flake8==4.0.1
-gpustat==0.6.0
-isort==5.10.0
-ipywidgets==7.6.5
-jupyterlab==3.2.2
-jupyterlab-code-formatter==1.4.10
-mypy==0.930
-tqdm==4.62.3
-
-# Fixes bug
-setuptools==59.5.0
+black
+flake8
+gpustat
+isort
+ipywidgets
+jupyterlab
+mypy
+tqdm
