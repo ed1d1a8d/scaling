@@ -6,12 +6,12 @@
 n_trains=(10000 50000 500000 5942688)
 for n_train in "${n_trains[@]}"; do
   ./src/ax/scripts/slurm.sh \
-    --n_trains $n_train \
+    --n_train $n_train \
     --do_adv_training False \
     --tags try1
 
   ./src/ax/scripts/slurm.sh \
-    --n_trains $n_train \
+    --n_train $n_train \
     --do_adv_training True \
     --tags try1
 done
