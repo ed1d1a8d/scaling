@@ -47,7 +47,7 @@ class ExperimentConfig:
     do_adv_training: bool = True
     lr: float = 1e-3
     min_lr: float = 1e-6
-    lr_decay_patience_epochs: int = 10
+    lr_decay_patience_evals: int = 10
 
     # eval params
     eval_batch_size: int = 512
@@ -147,8 +147,8 @@ def train(
         optimizer=optimizer,
         mode="min",
         factor=0.1,
-        min_lr=0.1 * cfg.min_lr,
-        patience=cfg.lr_decay_patience_epochs,
+        min_lr=0.01 * cfg.min_lr,
+        patience=cfg.lr_decay_patience_evals,
         verbose=True,
     )
     scaler = torch.cuda.amp.GradScaler()  # type: ignore
@@ -243,7 +243,17 @@ def run_experiment(cfg: ExperimentConfig):
         random_start=True,
     )
 
-    train(net, attack, cfg)
+    try:
+        train(net, attack, cfg)
+    except KeyboardInterrupt:  # Catches SIGINT more generally
+        print("Training interrupted!")
+
+    print("Saving model...")
+    torch.save(
+        net.state_dict(),
+        os.path.join(wandb.run.dir, "net.ckpt"),  # type: ignore
+    )
+    print("Model saved.")
 
     test_loaders = {
         "test": cifar.get_loader(split="test", batch_size=cfg.eval_batch_size),
@@ -263,13 +273,6 @@ def run_experiment(cfg: ExperimentConfig):
         for k, v in test_metrics.items():
             wandb.run.summary[k] = v  # type: ignore
         print(f"Finished evaluation of {name} split.")
-
-    print("Saving model...")
-    torch.save(
-        net.state_dict(),
-        os.path.join(wandb.run.dir, "net.ckpt"),  # type: ignore
-    )
-    print("Model saved.")
 
 
 def main():
