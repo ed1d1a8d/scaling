@@ -1,12 +1,14 @@
 import os
 
-import git
+import git.repo
 import numpy as np
 from ffcv.fields import IntField, RGBImageField
 from ffcv.writer import DatasetWriter
 from numpy.lib.npyio import NpzFile
 
-GIT_ROOT = str(git.Repo(".", search_parent_directories=True).working_tree_dir)
+GIT_ROOT = str(
+    git.repo.Repo(".", search_parent_directories=True).working_tree_dir
+)
 
 
 class NumpyDataset:
@@ -27,7 +29,11 @@ def get_cifar5m_part(i: int) -> str:
     return os.path.join(GIT_ROOT, f"data/cifar5m/part{i}.npz")
 
 
-def get_cifar5m_datasets(files: list[str], n_test: int = 30000):
+def get_cifar5m_datasets(
+    files: list[str],
+    n_val: int = 10_000,
+    n_test: int = 50_000,
+):
     npzs: list[NpzFile] = [np.load(f) for f in files]
     print("npz files all loaded!")
 
@@ -36,14 +42,24 @@ def get_cifar5m_datasets(files: list[str], n_test: int = 30000):
     del npzs  # Free memory
     print("concatenation finished")
 
-    xs_train, ys_train = xs[:-n_test], ys[:-n_test]
+    xs_train, ys_train = xs[: -(n_val + n_test)], ys[: -(n_val + n_test)]
+    xs_val, ys_val = (
+        xs[-(n_val + n_test) : -n_test],
+        ys[-(n_val + n_test) : -n_test],
+    )
     xs_test, ys_test = xs[-n_test:], ys[-n_test:]
 
-    print(len(xs_test), len(ys_test))
-    print(np.unique(ys_test, return_counts=True))
+    print("Val split stats")
+    print("Size:", len(ys_val))
+    print("Label freqs:", np.unique(ys_val, return_counts=True))
+
+    print("Test split stats")
+    print("Size:", len(ys_test))
+    print("Label freqs:", np.unique(ys_test, return_counts=True))
 
     return {
         "train": NumpyDataset(xs_train, ys_train),
+        "val": NumpyDataset(xs_val, ys_val),
         "test": NumpyDataset(xs_test, ys_test),
     }
 
