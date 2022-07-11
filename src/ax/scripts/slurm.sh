@@ -38,7 +38,7 @@ function waitUntilNJobsRemain() {
 }
 
 # Run experiment
-{ python -m src.ax.train_cifar5m $@; } &
+{ LD_LIBRARY_PATH=/home/gridsan/twang/.conda/envs/scaling-v2/lib python -m src.ax.train_cifar5m $@; } &
 
 # Wait until all experiments finish.
 waitUntilNJobsRemain 1
