@@ -2,9 +2,10 @@ import dataclasses
 import enum
 import os
 import warnings
-from typing import Any, Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
 import mup
+import numpy as np
 import torch
 import torch.cuda.amp
 import torch.nn.functional as F
@@ -107,6 +108,22 @@ def wandb_log(d: dict[str, Metric]):
             )
 
     wandb.log({name: metric.data for name, metric in d.items()})
+
+
+def save_model(model: nn.Module):
+    print("Saving model checkpoint...")
+    torch.save(
+        model.state_dict(),
+        os.path.join(wandb.run.dir, "model.ckpt"),  # type: ignore
+    )
+    print("Saved model checkpoint.")
+
+
+def load_model(model: nn.Module):
+    print("Loading model checkpoint...")
+    path: str = os.path.join(wandb.run.dir, "model.ckpt")  # type: ignore
+    model.load_state_dict(torch.load(path))
+    print("Loaded model checkpoint.")
 
 
 def get_imgs_to_log(
@@ -238,6 +255,7 @@ def train(
 
     n_steps: int = 0
     n_epochs: int = 0
+    min_val_loss: float = np.inf
     with tqdm() as pbar:
         while True:  # Termination will be handled outside
             imgs_nat: torch.Tensor
@@ -290,7 +308,12 @@ def train(
                     net.eval()
                     val_dict, val_imgs = evaluate(net, loader_val, attack, cfg)
                     net.train()
-                    lr_scheduler.step(val_dict["loss"].data)
+
+                    val_loss: float = val_dict["loss"].data
+                    lr_scheduler.step(val_loss)
+                    if val_loss < min_val_loss:
+                        min_val_loss = val_loss
+                        save_model(net)
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
                     log_dict["val_imgs"] = Metric(val_imgs)
@@ -342,12 +365,7 @@ def run_experiment(cfg: ExperimentConfig):
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
-    print("Saving model...")
-    torch.save(
-        net.state_dict(),
-        os.path.join(wandb.run.dir, "net.ckpt"),  # type: ignore
-    )
-    print("Model saved.")
+    load_model(net)
 
     test_loaders = {
         "test_orig": cifar.get_loader(
