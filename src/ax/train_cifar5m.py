@@ -278,7 +278,7 @@ def train(
                         train_loss=loss.item(),
                         train_acc=acc,
                         train_loss_nat=loss_nat.item(),
-                        trina_loss_adv=loss_adv.item(),
+                        train_loss_adv=loss_adv.item(),
                         train_acc_nat=acc_nat,
                         train_acc_adv=acc_adv,
                     )
