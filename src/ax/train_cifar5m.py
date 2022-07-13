@@ -1,7 +1,8 @@
 import dataclasses
 import enum
 import os
-from typing import Any, Optional
+import warnings
+from typing import Any, Generic, Optional, TypeVar
 
 import mup
 import torch
@@ -18,16 +19,18 @@ from src.ax.models import wrn
 from torch import nn
 from tqdm.auto import tqdm
 
+T = TypeVar("T")  # Declare type variable
+
 
 def ceil_div(a: int, b: int) -> int:
     return (a + b - 1) // b
 
 
 def tag_dict(
-    d: dict[str, Any],
+    d: dict[str, T],
     prefix: str = "",
     suffix: str = "",
-) -> dict[str, Any]:
+) -> dict[str, T]:
     return {f"{prefix}{key}{suffix}": val for key, val in d.items()}
 
 
@@ -80,6 +83,32 @@ class ExperimentConfig:
         raise ValueError(self.model_type)
 
 
+@dataclasses.dataclass
+class Metric(Generic[T]):
+    data: T
+    summary: Optional[str] = None
+
+
+WANDB_METRIC_SUMMARY_MAP: dict[str, Optional[str]] = dict()
+
+
+def wandb_log(d: dict[str, Metric]):
+    for name, metric in d.items():
+        if name not in WANDB_METRIC_SUMMARY_MAP:
+            WANDB_METRIC_SUMMARY_MAP[name] = metric.summary
+            if metric.summary is not None:
+                wandb.define_metric(name=name, summary=metric.summary)
+        elif WANDB_METRIC_SUMMARY_MAP[name] != metric.summary:
+            s1 = WANDB_METRIC_SUMMARY_MAP[name]
+            s2 = metric.summary
+            warnings.warn(
+                f"metric {name} has different summaries: {s1}, {s2}",
+                RuntimeWarning,
+            )
+
+    wandb.log({name: metric.data for name, metric in d.items()})
+
+
 def get_imgs_to_log(
     imgs_nat: torch.Tensor,
     imgs_adv: torch.Tensor,
@@ -117,7 +146,7 @@ def evaluate(
     loader: Loader,
     attack: torchattacks.attack.Attack,
     cfg: ExperimentConfig,
-) -> tuple[dict[str, float], list[wandb.Image]]:
+) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
     n: int = len(loader.indices)
 
     n_correct_nat: float = 0
@@ -160,12 +189,18 @@ def evaluate(
 
     return (
         dict(
-            acc_nat=n_correct_nat / n,
-            acc_adv=n_correct_adv / n,
-            loss_nat=tot_loss_nat / n,
-            loss_adv=tot_loss_adv / n,
-            acc=n_correct_adv / n if cfg.do_adv_training else n_correct_nat / n,
-            loss=tot_loss_adv / n if cfg.do_adv_training else tot_loss_nat / n,
+            acc_nat=Metric(n_correct_nat / n, "max"),
+            acc_adv=Metric(n_correct_adv / n, "max"),
+            loss_nat=Metric(tot_loss_nat / n, "min"),
+            loss_adv=Metric(tot_loss_adv / n, "min"),
+            acc=Metric(
+                n_correct_adv / n if cfg.do_adv_training else n_correct_nat / n,
+                "max",
+            ),
+            loss=Metric(
+                tot_loss_adv / n if cfg.do_adv_training else tot_loss_nat / n,
+                "min",
+            ),
         ),
         imgs_to_log,
     )
@@ -250,35 +285,37 @@ def train(
                     f"epochs={n_epochs}; loss={loss.item():6e}; acc={acc:.4f}; lr={cur_lr:6e}"
                 )
 
-                log_dict = dict()
+                log_dict: dict[str, Metric] = dict()
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
                     val_dict, val_imgs = evaluate(net, loader_val, attack, cfg)
                     net.train()
-                    lr_scheduler.step(val_dict["loss"])
+                    lr_scheduler.step(val_dict["loss"].data)
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
-                    log_dict["val_imgs"] = val_imgs
-                    log_dict["train_imgs"] = get_imgs_to_log(
-                        imgs_nat=imgs_nat,
-                        imgs_adv=imgs_adv,
-                        preds_nat=preds_nat,
-                        preds_adv=preds_adv,
-                        labs=labs,
-                        cfg=cfg,
+                    log_dict["val_imgs"] = Metric(val_imgs)
+                    log_dict["train_imgs"] = Metric(
+                        get_imgs_to_log(
+                            imgs_nat=imgs_nat,
+                            imgs_adv=imgs_adv,
+                            preds_nat=preds_nat,
+                            preds_adv=preds_adv,
+                            labs=labs,
+                            cfg=cfg,
+                        )
                     )
 
-                wandb.log(
+                wandb_log(
                     dict(
-                        step=n_steps,
-                        epoch=n_epochs,
-                        lr=cur_lr,
-                        train_loss=loss.item(),
-                        train_acc=acc,
-                        train_loss_nat=loss_nat.item(),
-                        train_loss_adv=loss_adv.item(),
-                        train_acc_nat=acc_nat,
-                        train_acc_adv=acc_adv,
+                        step=Metric(n_steps),
+                        epoch=Metric(n_epochs),
+                        lr=Metric(cur_lr),
+                        train_loss=Metric(loss.item(), "min"),
+                        train_acc=Metric(acc, "max"),
+                        train_loss_nat=Metric(loss_nat.item(), "min"),
+                        train_loss_adv=Metric(loss_adv.item(), "min"),
+                        train_acc_nat=Metric(acc_nat, "max"),
+                        train_acc_adv=Metric(acc_adv, "max"),
                     )
                     | log_dict
                 )
@@ -325,10 +362,10 @@ def run_experiment(cfg: ExperimentConfig):
     for name, loader in test_loaders.items():
         print(f"Starting evaluation of {name} split...")
         test_dict, test_imgs = evaluate(net, loader, attack, cfg)
-        wandb.log({f"{name}_imgs": test_imgs})
+        wandb_log({f"{name}_imgs": Metric(test_imgs)})
         test_metrics = tag_dict(test_dict, prefix=f"{name}_")
-        for k, v in test_metrics.items():
-            wandb.run.summary[k] = v  # type: ignore
+        for name, metric in test_metrics.items():
+            wandb.run.summary[name] = metric.data  # type: ignore
         print(f"Finished evaluation of {name} split.")
 
 
@@ -348,8 +385,8 @@ def main():
         save_code=True,
     )
 
-    # Save all ckpt files immediately
-    wandb.save("*.ckpt")
+    # Save and sync all ckpt files immediately
+    wandb.save("*.ckpt", policy="live")
 
     run_experiment(cfg)
 
