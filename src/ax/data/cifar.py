@@ -13,6 +13,21 @@ GIT_ROOT = str(
 )
 
 
+def cls_name(idx: int) -> str:
+    return [
+        "plane",  # "airplane",
+        "car",  # "automobile",
+        "bird",
+        "cat",
+        "deer",
+        "dog",
+        "frog",
+        "horse",
+        "ship",
+        "truck",
+    ][idx]
+
+
 def get_loader(
     split: str,
     batch_size: int,

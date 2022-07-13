@@ -7,6 +7,7 @@ import torch
 import torch.cuda.amp
 import torch.nn.functional as F
 import torchattacks.attack
+import torchvision.utils
 import wandb
 from ffcv.loader import Loader
 from simple_parsing import ArgumentParser
@@ -52,6 +53,7 @@ class ExperimentConfig:
     # eval params
     eval_batch_size: int = 512
     samples_per_eval: int = 512 * 100  # (51200) aka epoch size
+    n_imgs_to_log_per_eval: int = 30
 
     # attack parameter only for CIFAR-10 and SVHN
     adv_eps: float = 8 / 255
@@ -63,6 +65,8 @@ class ExperimentConfig:
 
     def __post_init__(self):
         assert self.samples_per_eval % self.batch_size == 0
+        assert self.n_imgs_to_log_per_eval <= self.batch_size
+        assert self.n_imgs_to_log_per_eval <= self.eval_batch_size
 
     @property
     def steps_per_eval(self):
@@ -78,12 +82,44 @@ class ExperimentConfig:
         raise ValueError(self.model_type)
 
 
+def get_imgs_to_log(
+    imgs_nat: torch.Tensor,
+    imgs_adv: torch.Tensor,
+    preds_nat: torch.Tensor,
+    preds_adv: torch.Tensor,
+    labs: torch.Tensor,
+    cfg: ExperimentConfig,
+) -> list[wandb.Image]:
+    imgs_diff = (imgs_adv - imgs_nat) / cfg.adv_eps / (2 + 1e-9) + 0.5
+
+    def get_caption(i: int) -> str:
+        lab = cifar.cls_name(int(labs[i].item()))
+        pred_nat = cifar.cls_name(int(preds_nat[i].item()))
+        pred_adv = cifar.cls_name(int(preds_adv[i].item()))
+        return "\n".join(
+            [
+                f"preds: {pred_nat}, {pred_adv}; true: {lab}",
+                f"img order: nat, adv, diff",
+            ]
+        )
+
+    return [
+        wandb.Image(
+            torchvision.utils.make_grid(
+                [imgs_nat[i], imgs_adv[i], imgs_diff[i]], nrow=3, ncol=1
+            ),
+            caption=get_caption(i),
+        )
+        for i in range(cfg.n_imgs_to_log_per_eval)
+    ]
+
+
 def evaluate(
     net: nn.Module,
     loader: Loader,
     attack: torchattacks.attack.Attack,
     cfg: ExperimentConfig,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], list[wandb.Image]]:
     n: int = len(loader.indices)
 
     n_correct_nat: float = 0
@@ -93,6 +129,7 @@ def evaluate(
 
     imgs_nat: torch.Tensor
     labs: torch.Tensor
+    imgs_to_log: list[wandb.Image] = []
     for (imgs_nat, labs) in tqdm(loader, leave=False):
         imgs_adv: torch.Tensor = attack(imgs_nat, labs)
 
@@ -104,8 +141,8 @@ def evaluate(
                 loss_nat = F.cross_entropy(logits_nat, labs, reduction="sum")
                 loss_adv = F.cross_entropy(logits_adv, labs, reduction="sum")
 
-        preds_nat = logits_nat.amax(dim=-1)
-        preds_adv = logits_adv.amax(dim=-1)
+        preds_nat = logits_nat.argmax(dim=-1)
+        preds_adv = logits_adv.argmax(dim=-1)
 
         n_correct_nat += preds_nat.eq(labs).sum().item()
         n_correct_adv += preds_adv.eq(labs).sum().item()
@@ -113,13 +150,26 @@ def evaluate(
         tot_loss_nat += loss_nat.item()
         tot_loss_adv += loss_adv.item()
 
-    return dict(
-        acc_nat=n_correct_nat / n,
-        acc_adv=n_correct_adv / n,
-        loss_nat=tot_loss_nat / n,
-        loss_adv=tot_loss_adv / n,
-        acc=n_correct_adv / n if cfg.do_adv_training else n_correct_nat / n,
-        loss=tot_loss_adv / n if cfg.do_adv_training else tot_loss_nat / n,
+        if len(imgs_to_log) == 0:
+            imgs_to_log = get_imgs_to_log(
+                imgs_nat=imgs_nat,
+                imgs_adv=imgs_adv,
+                preds_nat=preds_nat,
+                preds_adv=preds_adv,
+                labs=labs,
+                cfg=cfg,
+            )
+
+    return (
+        dict(
+            acc_nat=n_correct_nat / n,
+            acc_adv=n_correct_adv / n,
+            loss_nat=tot_loss_nat / n,
+            loss_adv=tot_loss_adv / n,
+            acc=n_correct_adv / n if cfg.do_adv_training else n_correct_nat / n,
+            loss=tot_loss_adv / n if cfg.do_adv_training else tot_loss_nat / n,
+        ),
+        imgs_to_log,
     )
 
 
@@ -185,8 +235,8 @@ def train(
                             logits_adv = net(imgs_adv)
                             loss_adv = F.cross_entropy(logits_adv, labs)
 
-                preds_nat = logits_nat.amax(dim=-1)
-                preds_adv = logits_adv.amax(dim=-1)
+                preds_nat = logits_nat.argmax(dim=-1)
+                preds_adv = logits_adv.argmax(dim=-1)
                 acc_nat: float = preds_nat.eq(labs).float().mean().item()
                 acc_adv: float = preds_adv.eq(labs).float().mean().item()
                 acc = acc_adv if cfg.do_adv_training else acc_nat
@@ -205,23 +255,32 @@ def train(
                 log_dict = dict()
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
-                    log_dict |= tag_dict(
-                        evaluate(net, loader_val, attack, cfg), prefix="val_"
-                    )
+                    val_dict, val_imgs = evaluate(net, loader_val, attack, cfg)
                     net.train()
-                    lr_scheduler.step(log_dict["val_loss"])
+                    lr_scheduler.step(val_dict["loss"])
+
+                    log_dict |= tag_dict(val_dict, prefix=f"val_")
+                    log_dict["val_imgs"] = val_imgs
+                    log_dict["train_imgs"] = get_imgs_to_log(
+                        imgs_nat=imgs_nat,
+                        imgs_adv=imgs_adv,
+                        preds_nat=preds_nat,
+                        preds_adv=preds_adv,
+                        labs=labs,
+                        cfg=cfg,
+                    )
 
                 wandb.log(
                     dict(
                         step=n_steps,
                         epoch=n_epochs,
                         lr=cur_lr,
-                        loss=loss.item(),
-                        acc=acc,
-                        loss_nat=loss_nat.item(),
-                        loss_adv=loss_adv.item(),
-                        acc_nat=acc_nat,
-                        acc_adv=acc_adv,
+                        train_loss=loss.item(),
+                        train_acc=acc,
+                        train_loss_nat=loss_nat.item(),
+                        trina_loss_adv=loss_adv.item(),
+                        train_acc_nat=acc_nat,
+                        train_acc_adv=acc_adv,
                     )
                     | log_dict
                 )
@@ -256,20 +315,20 @@ def run_experiment(cfg: ExperimentConfig):
     print("Model saved.")
 
     test_loaders = {
-        "test": cifar.get_loader(split="test", batch_size=cfg.eval_batch_size),
         "test_orig": cifar.get_loader(
             split="test-orig", batch_size=cfg.eval_batch_size
         ),
         "train_orig": cifar.get_loader(
             split="train-orig", batch_size=cfg.eval_batch_size
         ),
+        "test": cifar.get_loader(split="test", batch_size=cfg.eval_batch_size),
     }
+    net.eval()
     for name, loader in test_loaders.items():
         print(f"Starting evaluation of {name} split...")
-        net.eval()
-        test_metrics = tag_dict(
-            evaluate(net, loader, attack, cfg), prefix=f"{name}_"
-        )
+        test_dict, test_imgs = evaluate(net, loader, attack, cfg)
+        wandb.log({f"{name}_imgs": test_imgs})
+        test_metrics = tag_dict(test_dict, prefix=f"{name}_")
         for k, v in test_metrics.items():
             wandb.run.summary[k] = v  # type: ignore
         print(f"Finished evaluation of {name} split.")
