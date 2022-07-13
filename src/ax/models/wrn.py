@@ -1,6 +1,3 @@
-# Adapted from
-# https://github.com/deepmind/deepmind-research/blob/11c2ab53e8afd24afa8904f22fd81b699bfbce6e/adversarial_robustness/pytorch/model_zoo.py
-
 # Copyright 2020 Deepmind Technologies Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""WideResNet and PreActResNet implementations in PyTorch."""
 
-from typing import Tuple, Union, Type
+"""
+WideResNet implementation in PyTorch.
+Adapted from https://github.com/deepmind/deepmind-research/blob/11c2ab53e8afd24afa8904f22fd81b699bfbce6e/adversarial_robustness/pytorch/model_zoo.py
+Augmented with https://github.com/microsoft/mup.
+"""
 
+from typing import Any, Type, Union
+
+import mup
+import mup.init
 import torch
-from torch import nn
 import torch.nn.functional as F
-
+from torch import nn
 
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD = (0.2471, 0.2435, 0.2616)
@@ -47,7 +50,7 @@ class _Swish(torch.autograd.Function):
 class Swish(nn.Module):
     """Module using custom implementation."""
 
-    def forward(self, input_tensor):
+    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
         return _Swish.apply(input_tensor)
 
 
@@ -122,10 +125,10 @@ class _BlockGroup(nn.Module):
 
     def __init__(
         self,
-        num_blocks,
-        in_planes,
-        out_planes,
-        stride,
+        num_blocks: int,
+        in_planes: int,
+        out_planes: int,
+        stride: int,
         activation_fn: Type[nn.Module] = Swish,
     ):
         super().__init__()
@@ -154,16 +157,18 @@ class WideResNet(nn.Module):
         depth: int = 28,
         width: int = 10,
         activation_fn: Type[nn.Module] = Swish,
-        mean: Union[Tuple[float, ...], float] = CIFAR10_MEAN,
-        std: Union[Tuple[float, ...], float] = CIFAR10_STD,
+        mean: Union[tuple[float, ...], float] = CIFAR10_MEAN,
+        std: Union[tuple[float, ...], float] = CIFAR10_STD,
         padding: int = 0,
         num_input_channels: int = 3,
     ):
         super().__init__()
-        self.mean = torch.tensor(mean).view(num_input_channels, 1, 1)
-        self.std = torch.tensor(std).view(num_input_channels, 1, 1)
-        self.mean_cuda = None
-        self.std_cuda = None
+        self.mean = nn.parameter.Parameter(
+            torch.tensor(mean).view(num_input_channels, 1, 1)
+        )
+        self.std = nn.parameter.Parameter(
+            torch.tensor(std).view(num_input_channels, 1, 1)
+        )
         self.padding = padding
         num_channels = [16, 16 * width, 32 * width, 64 * width]
         assert (depth - 4) % 6 == 0
@@ -201,22 +206,36 @@ class WideResNet(nn.Module):
         )
         self.batchnorm = nn.BatchNorm2d(num_channels[3])
         self.relu = activation_fn()
-        self.logits = nn.Linear(num_channels[3], num_classes)
+
+        # self.logits = nn.Linear(num_channels[3], num_classes)
+        self.readout = mup.MuReadout(num_channels[3], num_classes)
+
         self.num_channels = num_channels[3]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.padding > 0:
             x = F.pad(x, (self.padding,) * 4)
-        if x.is_cuda:
-            if self.mean_cuda is None:
-                self.mean_cuda = self.mean.cuda()
-                self.std_cuda = self.std.cuda()
-            out = (x - self.mean_cuda) / self.std_cuda
-        else:
-            out = (x - self.mean) / self.std
+
+        out = (x - self.mean) / self.std
+
         out = self.init_conv(out)
         out = self.layer(out)
         out = self.relu(self.batchnorm(out))
         out = F.avg_pool2d(out, 8)
         out = out.view(-1, self.num_channels)
-        return self.logits(out)
+
+        # return self.logits(out)
+        return self.readout(out)
+
+
+def get_mup_wrn(**kwargs) -> WideResNet:
+    def rm_width(d: dict[str, Any]):
+        return {k: v for k, v in d.items() if k != "width"}
+
+    base_model = WideResNet(width=10, **rm_width(kwargs)).to("meta")
+    delta_model = WideResNet(width=2, **rm_width(kwargs)).to("meta")
+
+    model = WideResNet(**kwargs)
+    mup.set_base_shapes(model, base_model, delta=delta_model)
+
+    return model

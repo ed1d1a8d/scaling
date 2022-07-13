@@ -3,6 +3,7 @@ import enum
 import os
 from typing import Any, Optional
 
+import mup
 import torch
 import torch.cuda.amp
 import torch.nn.functional as F
@@ -13,8 +14,8 @@ from ffcv.loader import Loader
 from simple_parsing import ArgumentParser
 from src.ax.attack.FastPGD import FastPGD
 from src.ax.data import cifar
-from src.ax.models.wrn import WideResNet
-from torch import nn, optim
+from src.ax.models import wrn
+from torch import nn
 from tqdm.auto import tqdm
 
 
@@ -48,7 +49,7 @@ class ExperimentConfig:
     do_adv_training: bool = True
     lr: float = 1e-3
     min_lr: float = 1e-6
-    lr_decay_patience_evals: int = 10
+    lr_decay_patience_evals: int = 5
 
     # eval params
     eval_batch_size: int = 512
@@ -74,10 +75,7 @@ class ExperimentConfig:
 
     def get_net(self) -> nn.Module:
         if self.model_type is ModelT.WideResNet:
-            return WideResNet(
-                depth=self.depth,
-                width=self.width,
-            )
+            return wrn.get_mup_wrn(depth=self.depth, width=self.width)
 
         raise ValueError(self.model_type)
 
@@ -188,7 +186,7 @@ def train(
     loader_val = cifar.get_loader(split="val", batch_size=cfg.eval_batch_size)
     print("train and val loaders created!")
 
-    optimizer = optim.AdamW(
+    optimizer = mup.MuAdamW(
         net.parameters(),
         lr=cfg.lr,
         weight_decay=cfg.weight_decay,
