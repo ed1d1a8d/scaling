@@ -8,10 +8,12 @@ for n_train in "${n_trains[@]}"; do
   ./src/ax/scripts/slurm.sh \
     --n_train $n_train \
     --do_adv_training False \
-    --tags try1.2
+    --width 20 \
+    --tags try1.2.1
 
   ./src/ax/scripts/slurm.sh \
     --n_train $n_train \
     --do_adv_training True \
-    --tags try1.2
+    --width 20 \
+    --tags try1.2.1
 done

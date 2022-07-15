@@ -20,7 +20,7 @@ from src.ax.models import wrn
 from torch import nn
 from tqdm.auto import tqdm
 
-T = TypeVar("T")  # Declare type variable
+T = TypeVar("T")
 
 
 def ceil_div(a: int, b: int) -> int:
@@ -174,35 +174,42 @@ def evaluate(
     imgs_nat: torch.Tensor
     labs: torch.Tensor
     imgs_to_log: list[wandb.Image] = []
-    for (imgs_nat, labs) in tqdm(loader, leave=False):
-        imgs_adv: torch.Tensor = attack(imgs_nat, labs)
+    with tqdm(total=len(loader)) as pbar:
+        for (imgs_nat, labs) in loader:
+            imgs_adv: torch.Tensor = attack(imgs_nat, labs)
 
-        with torch.autocast("cuda"):  # type: ignore
-            with torch.no_grad():
-                logits_nat = net(imgs_nat)
-                logits_adv = net(imgs_adv)
+            with torch.autocast("cuda"):  # type: ignore
+                with torch.no_grad():
+                    logits_nat = net(imgs_nat)
+                    logits_adv = net(imgs_adv)
 
-                loss_nat = F.cross_entropy(logits_nat, labs, reduction="sum")
-                loss_adv = F.cross_entropy(logits_adv, labs, reduction="sum")
+                    loss_nat = F.cross_entropy(
+                        logits_nat, labs, reduction="sum"
+                    )
+                    loss_adv = F.cross_entropy(
+                        logits_adv, labs, reduction="sum"
+                    )
 
-        preds_nat = logits_nat.argmax(dim=-1)
-        preds_adv = logits_adv.argmax(dim=-1)
+            preds_nat = logits_nat.argmax(dim=-1)
+            preds_adv = logits_adv.argmax(dim=-1)
 
-        n_correct_nat += preds_nat.eq(labs).sum().item()
-        n_correct_adv += preds_adv.eq(labs).sum().item()
+            n_correct_nat += preds_nat.eq(labs).sum().item()
+            n_correct_adv += preds_adv.eq(labs).sum().item()
 
-        tot_loss_nat += loss_nat.item()
-        tot_loss_adv += loss_adv.item()
+            tot_loss_nat += loss_nat.item()
+            tot_loss_adv += loss_adv.item()
 
-        if len(imgs_to_log) == 0:
-            imgs_to_log = get_imgs_to_log(
-                imgs_nat=imgs_nat,
-                imgs_adv=imgs_adv,
-                preds_nat=preds_nat,
-                preds_adv=preds_adv,
-                labs=labs,
-                cfg=cfg,
-            )
+            if len(imgs_to_log) == 0:
+                imgs_to_log = get_imgs_to_log(
+                    imgs_nat=imgs_nat,
+                    imgs_adv=imgs_adv,
+                    preds_nat=preds_nat,
+                    preds_adv=preds_adv,
+                    labs=labs,
+                    cfg=cfg,
+                )
+
+            pbar.update(1)
 
     return (
         dict(
@@ -313,6 +320,7 @@ def train(
                     lr_scheduler.step(val_loss)
                     if val_loss < min_val_loss:
                         min_val_loss = val_loss
+                        wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
                         save_model(net)
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
