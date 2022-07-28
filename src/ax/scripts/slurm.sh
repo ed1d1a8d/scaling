@@ -38,7 +38,7 @@ function waitUntilNJobsRemain() {
 }
 
 # Run experiment
-{ LD_LIBRARY_PATH=$HOME/.conda/envs/scaling-v2/lib python -m src.ax.train_cifar5m $@; } &
+{ LD_LIBRARY_PATH=$HOME/.conda/envs/scaling-v2/lib python -m src.ax.train $@; } &
 
 # Wait until all experiments finish.
 waitUntilNJobsRemain 1

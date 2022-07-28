@@ -25,10 +25,11 @@ torchattacks
 
 # Other deep learning libraries
 einops
-pytorch-lightning
-torchtyping
-neural-tangents
 mup
+neural-tangents
+pytorch-lightning
+tensor-canvas
+torchtyping
 
 # Configuration parsing
 simple-parsing

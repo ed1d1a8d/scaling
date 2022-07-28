@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Sequence
 
 import git.repo
 import torch
@@ -31,7 +31,7 @@ def cls_name(idx: int) -> str:
 def get_loader(
     split: str,
     batch_size: int,
-    n: Optional[int] = None,
+    indices: Optional[Sequence[int]] = None,
     num_workers: int = 20,
     random_order: bool = False,
     os_cache: bool = True,
@@ -70,8 +70,8 @@ def get_loader(
         drop_last=False,
         pipelines={"image": image_pipeline, "label": label_pipeline},
         seed=seed,
-        indices=None if n is None else range(n),  # type: ignore
+        indices=indices,  # type: ignore
     )
-    assert (n is None) or (n <= loader.reader.num_samples)
+    assert (indices is None) or (max(indices) < loader.reader.num_samples)
 
     return loader

@@ -2,20 +2,21 @@ import dataclasses
 import enum
 import os
 import warnings
-from typing import Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar, Union
 
+import ffcv.loader
 import mup
 import numpy as np
 import torch
 import torch.cuda.amp
 import torch.nn.functional as F
+import torch.utils.data
 import torchattacks.attack
 import torchvision.utils
 import wandb
-from ffcv.loader import Loader
 from simple_parsing import ArgumentParser
 from src.ax.attack.FastPGD import FastPGD
-from src.ax.data import cifar
+from src.ax.data import cifar, synthetic
 from src.ax.models import wrn
 from torch import nn
 from tqdm.auto import tqdm
@@ -39,15 +40,31 @@ class ModelT(enum.Enum):
     WideResNet = enum.auto()
 
 
+class DatasetT(enum.Enum):
+    CIFAR10 = enum.auto()
+    CIFAR5m = enum.auto()
+    LightDark = enum.auto()
+    HVStripe = enum.auto()
+    SquareCircle = enum.auto()
+
+
 @dataclasses.dataclass
 class ExperimentConfig:
+    # dataset params
+    dataset_type: DatasetT = DatasetT.CIFAR5m
+    LightDark_cfg: synthetic.LightDarkDSConfig = synthetic.LightDarkDSConfig()
+    HVStripe_cfg: synthetic.HVStripeDSConfig = synthetic.HVStripeDSConfig()
+    SquareCircle_cfg: synthetic.SquareCircleDSConfig = (
+        synthetic.SquareCircleDSConfig()
+    )
+
     # model params
     model_type: ModelT = ModelT.WideResNet
     depth: int = 28
     width: int = 10  # Only applicable for wide nets
 
     # train params
-    n_train: Optional[int] = 2048
+    n_train: int = 2048
     weight_decay: float = 5e-4
     batch_size: int = 512
     do_adv_training: bool = True
@@ -66,6 +83,7 @@ class ExperimentConfig:
 
     # Other params
     seed: int = 42
+    num_workers: int = 20
     tags: tuple[str, ...] = ("test",)
 
     def __post_init__(self):
@@ -77,9 +95,148 @@ class ExperimentConfig:
     def steps_per_eval(self):
         return self.samples_per_eval // self.batch_size
 
+    @property
+    def data_mean(self):
+        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+            return wrn.CIFAR10_MEAN
+        return (0.0, 0.0, 0.0)
+
+    @property
+    def data_std(self):
+        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+            return wrn.CIFAR10_STD
+        return (1.0, 1.0, 1.0)
+
+    @property
+    def num_classes(self):
+        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+            return 10
+        if self.dataset_type in (
+            DatasetT.LightDark,
+            DatasetT.HVStripe,
+            DatasetT.SquareCircle,
+        ):
+            return 2
+
+        raise ValueError(self.dataset_type)
+
+    def get_synthetic_loader(self, split: str, size: int, **kwargs):
+        ds_cls, ds_cfg = {
+            DatasetT.LightDark: (synthetic.LightDarkDS, self.LightDark_cfg),
+            DatasetT.HVStripe: (synthetic.HVStripeDS, self.HVStripe_cfg),
+            DatasetT.SquareCircle: (
+                synthetic.SquareCircleDS,
+                self.SquareCircle_cfg,
+            ),
+        }[self.dataset_type]
+
+        return torch.utils.data.DataLoader(
+            dataset=(ds_cls(cfg=ds_cfg, split=split, size=size)),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            **kwargs,
+        )
+
+    def get_loader_train(self):
+        if self.dataset_type is DatasetT.CIFAR5m:
+            return cifar.get_loader(
+                split="train",
+                batch_size=self.batch_size,
+                indices=range(self.n_train),
+                random_order=True,
+                seed=self.seed,
+                num_workers=self.num_workers,
+            )
+
+        if self.dataset_type is DatasetT.CIFAR10:
+            return cifar.get_loader(
+                split="train-orig",
+                batch_size=self.batch_size,
+                indices=range(self.n_train),
+                random_order=True,
+                seed=self.seed,
+                num_workers=self.num_workers,
+            )
+
+        if self.dataset_type in (
+            DatasetT.LightDark,
+            DatasetT.HVStripe,
+            DatasetT.SquareCircle,
+        ):
+            return self.get_synthetic_loader(
+                split="train", size=self.n_train, shuffle=True
+            )
+
+        raise ValueError(self.dataset_type)
+
+    def get_loader_val(self):
+        if self.dataset_type is DatasetT.CIFAR5m:
+            return cifar.get_loader(
+                split="val", batch_size=self.eval_batch_size
+            )
+
+        if self.dataset_type is DatasetT.CIFAR10:
+            return cifar.get_loader(
+                split="test-orig",
+                batch_size=self.eval_batch_size,
+                indices=range(5000),
+            )
+
+        if self.dataset_type in (
+            DatasetT.LightDark,
+            DatasetT.HVStripe,
+            DatasetT.SquareCircle,
+        ):
+            return self.get_synthetic_loader(split="val", size=5_000)
+
+        raise ValueError(self.dataset_type)
+
+    def get_test_loaders(self):
+        if self.dataset_type is DatasetT.CIFAR5m:
+            return {
+                "test_orig": cifar.get_loader(
+                    split="test-orig", batch_size=self.eval_batch_size
+                ),
+                "train_orig": cifar.get_loader(
+                    split="train-orig", batch_size=self.eval_batch_size
+                ),
+                "test": cifar.get_loader(
+                    split="test", batch_size=self.eval_batch_size
+                ),
+            }
+
+        if self.dataset_type is DatasetT.CIFAR10:
+            return {
+                "test_orig": cifar.get_loader(
+                    split="test-orig",
+                    batch_size=self.eval_batch_size,
+                    indices=range(5_000, 10_000),
+                ),
+                "test_5m": cifar.get_loader(
+                    split="test", batch_size=self.eval_batch_size
+                ),
+            }
+
+        if self.dataset_type in (
+            DatasetT.LightDark,
+            DatasetT.HVStripe,
+            DatasetT.SquareCircle,
+        ):
+            return {
+                "test": self.get_synthetic_loader(split="test", size=10_000)
+            }
+
+        raise ValueError(self.dataset_type)
+
     def get_net(self) -> nn.Module:
         if self.model_type is ModelT.WideResNet:
-            return wrn.get_mup_wrn(depth=self.depth, width=self.width)
+            return wrn.get_mup_wrn(
+                depth=self.depth,
+                width=self.width,
+                num_classes=self.num_classes,
+                mean=self.data_mean,
+                std=self.data_std,
+            )
 
         raise ValueError(self.model_type)
 
@@ -160,11 +317,15 @@ def get_imgs_to_log(
 
 def evaluate(
     net: nn.Module,
-    loader: Loader,
+    loader: Union[ffcv.loader.Loader, torch.utils.data.DataLoader],
     attack: torchattacks.attack.Attack,
     cfg: ExperimentConfig,
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
-    n: int = len(loader.indices)
+    n: int = (
+        len(loader.indices)
+        if isinstance(loader, ffcv.loader.Loader)
+        else len(loader.dataset)  # type: ignore
+    )
 
     n_correct_nat: float = 0
     n_correct_adv: float = 0
@@ -176,6 +337,9 @@ def evaluate(
     imgs_to_log: list[wandb.Image] = []
     with tqdm(total=len(loader)) as pbar:
         for (imgs_nat, labs) in loader:
+            imgs_nat = imgs_nat.cuda()
+            labs = labs.cuda()
+
             imgs_adv: torch.Tensor = attack(imgs_nat, labs)
 
             with torch.autocast("cuda"):  # type: ignore
@@ -235,14 +399,8 @@ def train(
     attack: torchattacks.attack.Attack,
     cfg: ExperimentConfig,
 ):
-    loader_train = cifar.get_loader(
-        split="train",
-        batch_size=cfg.batch_size,
-        n=cfg.n_train,
-        random_order=True,
-        seed=cfg.seed,
-    )
-    loader_val = cifar.get_loader(split="val", batch_size=cfg.eval_batch_size)
+    loader_train = cfg.get_loader_train()
+    loader_val = cfg.get_loader_val()
     print("train and val loaders created!")
 
     optimizer = mup.MuAdamW(
@@ -268,6 +426,9 @@ def train(
             imgs_nat: torch.Tensor
             labs: torch.Tensor
             for (imgs_nat, labs) in loader_train:
+                imgs_nat = imgs_nat.cuda()
+                labs = labs.cuda()
+
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
                     print(
@@ -375,24 +536,18 @@ def run_experiment(cfg: ExperimentConfig):
 
     load_model(net)
 
-    test_loaders = {
-        "test_orig": cifar.get_loader(
-            split="test-orig", batch_size=cfg.eval_batch_size
-        ),
-        "train_orig": cifar.get_loader(
-            split="train-orig", batch_size=cfg.eval_batch_size
-        ),
-        "test": cifar.get_loader(split="test", batch_size=cfg.eval_batch_size),
-    }
+    test_loaders = cfg.get_test_loaders()
     net.eval()
-    for name, loader in test_loaders.items():
-        print(f"Starting evaluation of {name} split...")
+    for split_name, loader in test_loaders.items():
+        print(f"Starting evaluation of {split_name} split...")
         test_dict, test_imgs = evaluate(net, loader, attack, cfg)
-        wandb_log({f"{name}_imgs": Metric(test_imgs)})
-        test_metrics = tag_dict(test_dict, prefix=f"{name}_")
+
+        wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
+        test_metrics = tag_dict(test_dict, prefix=f"{split_name}_")
         for name, metric in test_metrics.items():
             wandb.run.summary[name] = metric.data  # type: ignore
-        print(f"Finished evaluation of {name} split.")
+
+        print(f"Finished evaluation of {split_name} split.")
 
 
 def main():
