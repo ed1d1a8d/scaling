@@ -85,6 +85,7 @@ class ExperimentConfig:
     seed: int = 42
     num_workers: int = 20
     tags: tuple[str, ...] = ("test",)
+    wandb_dir: str = "/home/gridsan/groups/ccg"
 
     def __post_init__(self):
         assert self.samples_per_eval % self.batch_size == 0
@@ -564,6 +565,7 @@ def main():
     wandb.init(
         entity="data-frugal-learning",
         project="adv-train",
+        dir=cfg.wandb_dir,
         tags=cfg.tags,
         config=dataclasses.asdict(cfg),
         save_code=True,
