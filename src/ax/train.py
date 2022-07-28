@@ -51,7 +51,7 @@ class DatasetT(enum.Enum):
 @dataclasses.dataclass
 class ExperimentConfig:
     # dataset params
-    dataset_type: DatasetT = DatasetT.CIFAR5m
+    dataset: DatasetT = DatasetT.CIFAR5m
     LightDark_cfg: synthetic.LightDarkDSConfig = synthetic.LightDarkDSConfig()
     HVStripe_cfg: synthetic.HVStripeDSConfig = synthetic.HVStripeDSConfig()
     SquareCircle_cfg: synthetic.SquareCircleDSConfig = (
@@ -59,7 +59,7 @@ class ExperimentConfig:
     )
 
     # model params
-    model_type: ModelT = ModelT.WideResNet
+    model: ModelT = ModelT.WideResNet
     depth: int = 28
     width: int = 10  # Only applicable for wide nets
 
@@ -97,28 +97,28 @@ class ExperimentConfig:
 
     @property
     def data_mean(self):
-        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+        if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
             return wrn.CIFAR10_MEAN
         return (0.0, 0.0, 0.0)
 
     @property
     def data_std(self):
-        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+        if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
             return wrn.CIFAR10_STD
         return (1.0, 1.0, 1.0)
 
     @property
     def num_classes(self):
-        if self.dataset_type in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+        if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
             return 10
-        if self.dataset_type in (
+        if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
         ):
             return 2
 
-        raise ValueError(self.dataset_type)
+        raise ValueError(self.dataset)
 
     def get_synthetic_loader(self, split: str, size: int, **kwargs):
         ds_cls, ds_cfg = {
@@ -128,7 +128,7 @@ class ExperimentConfig:
                 synthetic.SquareCircleDS,
                 self.SquareCircle_cfg,
             ),
-        }[self.dataset_type]
+        }[self.dataset]
 
         return torch.utils.data.DataLoader(
             dataset=(ds_cls(cfg=ds_cfg, split=split, size=size)),
@@ -138,7 +138,7 @@ class ExperimentConfig:
         )
 
     def get_loader_train(self):
-        if self.dataset_type is DatasetT.CIFAR5m:
+        if self.dataset is DatasetT.CIFAR5m:
             return cifar.get_loader(
                 split="train",
                 batch_size=self.batch_size,
@@ -148,7 +148,7 @@ class ExperimentConfig:
                 num_workers=self.num_workers,
             )
 
-        if self.dataset_type is DatasetT.CIFAR10:
+        if self.dataset is DatasetT.CIFAR10:
             return cifar.get_loader(
                 split="train-orig",
                 batch_size=self.batch_size,
@@ -158,7 +158,7 @@ class ExperimentConfig:
                 num_workers=self.num_workers,
             )
 
-        if self.dataset_type in (
+        if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
@@ -167,32 +167,32 @@ class ExperimentConfig:
                 split="train", size=self.n_train, shuffle=True
             )
 
-        raise ValueError(self.dataset_type)
+        raise ValueError(self.dataset)
 
     def get_loader_val(self):
-        if self.dataset_type is DatasetT.CIFAR5m:
+        if self.dataset is DatasetT.CIFAR5m:
             return cifar.get_loader(
                 split="val", batch_size=self.eval_batch_size
             )
 
-        if self.dataset_type is DatasetT.CIFAR10:
+        if self.dataset is DatasetT.CIFAR10:
             return cifar.get_loader(
                 split="test-orig",
                 batch_size=self.eval_batch_size,
                 indices=range(5000),
             )
 
-        if self.dataset_type in (
+        if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
         ):
             return self.get_synthetic_loader(split="val", size=5_000)
 
-        raise ValueError(self.dataset_type)
+        raise ValueError(self.dataset)
 
     def get_test_loaders(self):
-        if self.dataset_type is DatasetT.CIFAR5m:
+        if self.dataset is DatasetT.CIFAR5m:
             return {
                 "test_orig": cifar.get_loader(
                     split="test-orig", batch_size=self.eval_batch_size
@@ -205,7 +205,7 @@ class ExperimentConfig:
                 ),
             }
 
-        if self.dataset_type is DatasetT.CIFAR10:
+        if self.dataset is DatasetT.CIFAR10:
             return {
                 "test_orig": cifar.get_loader(
                     split="test-orig",
@@ -217,7 +217,7 @@ class ExperimentConfig:
                 ),
             }
 
-        if self.dataset_type in (
+        if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
@@ -226,10 +226,10 @@ class ExperimentConfig:
                 "test": self.get_synthetic_loader(split="test", size=10_000)
             }
 
-        raise ValueError(self.dataset_type)
+        raise ValueError(self.dataset)
 
     def get_net(self) -> nn.Module:
-        if self.model_type is ModelT.WideResNet:
+        if self.model is ModelT.WideResNet:
             return wrn.get_mup_wrn(
                 depth=self.depth,
                 width=self.width,
@@ -238,7 +238,7 @@ class ExperimentConfig:
                 std=self.data_std,
             )
 
-        raise ValueError(self.model_type)
+        raise ValueError(self.model)
 
 
 @dataclasses.dataclass
