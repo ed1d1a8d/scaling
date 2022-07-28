@@ -557,6 +557,9 @@ def main():
     args = parser.parse_args()
     cfg: ExperimentConfig = args.experiment_config
 
+    # Don't upload ckpt's to wandb, since they are big and are saved on supercloud.
+    os.environ["WANDB_IGNORE_GLOBS"] = "*.ckpt"
+
     # Initialize wandb
     wandb.init(
         entity="data-frugal-learning",
@@ -565,9 +568,6 @@ def main():
         config=dataclasses.asdict(cfg),
         save_code=True,
     )
-
-    # Save and sync all ckpt files immediately
-    wandb.save("*.ckpt", policy="live")
 
     run_experiment(cfg)
 
