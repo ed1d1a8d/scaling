@@ -38,7 +38,7 @@ function waitUntilNJobsRemain() {
 }
 
 # Run experiment
-{ LD_LIBRARY_PATH=/home/gridsan/groups/ccg/scaling-v2/lib python -m src.ax.train $@; } &
+{ LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.ax.train $@; } &
 
 # Wait until all experiments finish.
 waitUntilNJobsRemain 1
