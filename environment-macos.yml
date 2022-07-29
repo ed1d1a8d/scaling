@@ -1,0 +1,11 @@
+name: scaling-v2
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+
+  # FFCV related things
+  - pkg-config
+  - compilers
+  - libjpeg-turbo
+  - opencv
