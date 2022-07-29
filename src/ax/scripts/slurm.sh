@@ -38,7 +38,11 @@ function waitUntilNJobsRemain() {
 }
 
 # Run experiment
-{ LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.ax.train $@; } &
+n_trains=(2 4 10 20 50 80 100 200 300 500 1000 2000 5000 10000 20000 50000)
+for n_train in "\${n_trains[@]}"
+do
+  LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.ax.train --n_train \$n_train $@;
+done
 
 # Wait until all experiments finish.
 waitUntilNJobsRemain 1

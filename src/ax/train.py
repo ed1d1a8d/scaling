@@ -188,7 +188,7 @@ class ExperimentConfig:
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
         ):
-            return self.get_synthetic_loader(split="val", size=5_000)
+            return self.get_synthetic_loader(split="val", size=2_000)
 
         raise ValueError(self.dataset)
 
@@ -224,7 +224,7 @@ class ExperimentConfig:
             DatasetT.SquareCircle,
         ):
             return {
-                "test": self.get_synthetic_loader(split="test", size=10_000)
+                "test": self.get_synthetic_loader(split="test", size=5_000)
             }
 
         raise ValueError(self.dataset)
