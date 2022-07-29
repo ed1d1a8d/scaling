@@ -89,8 +89,6 @@ class ExperimentConfig:
 
     def __post_init__(self):
         assert self.samples_per_eval % self.batch_size == 0
-        assert self.n_imgs_to_log_per_eval <= self.batch_size
-        assert self.n_imgs_to_log_per_eval <= self.eval_batch_size
 
     @property
     def steps_per_eval(self):
@@ -223,9 +221,7 @@ class ExperimentConfig:
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
         ):
-            return {
-                "test": self.get_synthetic_loader(split="test", size=5_000)
-            }
+            return {"test": self.get_synthetic_loader(split="test", size=5_000)}
 
         raise ValueError(self.dataset)
 
@@ -312,7 +308,7 @@ def get_imgs_to_log(
             ),
             caption=get_caption(i),
         )
-        for i in range(cfg.n_imgs_to_log_per_eval)
+        for i in range(min(cfg.n_imgs_to_log_per_eval, len(imgs_nat)))
     ]
 
 
