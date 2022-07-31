@@ -88,11 +88,11 @@ class ExperimentConfig:
     wandb_dir: str = "/home/gridsan/groups/ccg"
 
     def __post_init__(self):
-        assert self.samples_per_eval % self.batch_size == 0
+        self.batch_size = min(self.batch_size, self.n_train)
 
     @property
     def steps_per_eval(self):
-        return self.samples_per_eval // self.batch_size
+        return ceil_div(self.samples_per_eval, self.batch_size)
 
     @property
     def data_mean(self):
