@@ -13,6 +13,7 @@ sbatch <<EOT
 #SBATCH -o slurm-logs/ax/log-%j
 #SBATCH -c 20
 #SBATCH --gres=gpu:volta:1
+#SBATCH --exclude=d-14-9-1
 
 # Load conda environment.
 # See https://github.com/conda/conda/issues/7980#issuecomment-441358406
@@ -38,11 +39,7 @@ function waitUntilNJobsRemain() {
 }
 
 # Run experiment
-n_trains=(2 4 10 20 50 80 100 200 300 500 1000 2000 5000 10000 20000 50000)
-for n_train in "\${n_trains[@]}"
-do
-  LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.ax.train --n_train \$n_train $@;
-done
+LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.ax.train $@
 
 # Wait until all experiments finish.
 waitUntilNJobsRemain 1
