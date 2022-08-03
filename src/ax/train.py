@@ -78,7 +78,8 @@ class ExperimentConfig:
     n_imgs_to_log_per_eval: int = 30
 
     # attack parameter only for CIFAR-10 and SVHN
-    adv_eps: float = 8 / 255
+    adv_eps_train: float = 8 / 255
+    adv_eps_eval: float = 8 / 255
     pgd_steps: int = 10
 
     # Other params
@@ -287,8 +288,9 @@ def get_imgs_to_log(
     preds_adv: torch.Tensor,
     labs: torch.Tensor,
     cfg: ExperimentConfig,
+    adv_eps: float,
 ) -> list[wandb.Image]:
-    imgs_diff = (imgs_adv - imgs_nat) / cfg.adv_eps / (2 + 1e-9) + 0.5
+    imgs_diff = (imgs_adv - imgs_nat) / adv_eps / (2 + 1e-9) + 0.5
 
     def get_caption(i: int) -> str:
         lab = cifar.cls_name(int(labs[i].item()))
@@ -368,6 +370,7 @@ def evaluate(
                     preds_adv=preds_adv,
                     labs=labs,
                     cfg=cfg,
+                    adv_eps=cfg.adv_eps_eval,
                 )
 
             pbar.update(1)
@@ -393,7 +396,8 @@ def evaluate(
 
 def train(
     net: nn.Module,
-    attack: torchattacks.attack.Attack,
+    attack_train: torchattacks.attack.Attack,
+    attack_eval: torchattacks.attack.Attack,
     cfg: ExperimentConfig,
 ):
     loader_train = cfg.get_loader_train()
@@ -433,7 +437,7 @@ def train(
                     )
                     return
 
-                imgs_adv: torch.Tensor = attack(imgs_nat, labs)
+                imgs_adv: torch.Tensor = attack_train(imgs_nat, labs)
 
                 with torch.autocast("cuda"):  # type: ignore
                     if cfg.do_adv_training:
@@ -471,7 +475,7 @@ def train(
                 log_dict: dict[str, Metric] = dict()
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
-                    val_dict, val_imgs = evaluate(net, loader_val, attack, cfg)
+                    val_dict, val_imgs = evaluate(net, loader_val, attack_eval, cfg)
                     net.train()
 
                     val_loss: float = val_dict["loss"].data
@@ -491,6 +495,7 @@ def train(
                             preds_adv=preds_adv,
                             labs=labs,
                             cfg=cfg,
+                            adv_eps=cfg.adv_eps_train
                         )
                     )
 
@@ -518,16 +523,23 @@ def run_experiment(cfg: ExperimentConfig):
     net: nn.Module = cfg.get_net().cuda()
     net = net.to(memory_format=torch.channels_last)  # type: ignore
 
-    attack = FastPGD(
+    attack_train = FastPGD(
         model=net,
-        eps=cfg.adv_eps,
-        alpha=cfg.adv_eps / cfg.pgd_steps * 2.3,
+        eps=cfg.adv_eps_train,
+        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3,
+        steps=cfg.pgd_steps,
+        random_start=True,
+    )
+    attack_eval = FastPGD(
+        model=net,
+        eps=cfg.adv_eps_eval,
+        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
     )
 
     try:
-        train(net, attack, cfg)
+        train(net, attack_train, attack_eval, cfg)
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
@@ -537,7 +549,7 @@ def run_experiment(cfg: ExperimentConfig):
     net.eval()
     for split_name, loader in test_loaders.items():
         print(f"Starting evaluation of {split_name} split...")
-        test_dict, test_imgs = evaluate(net, loader, attack, cfg)
+        test_dict, test_imgs = evaluate(net, loader, attack_eval, cfg)
 
         wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
         test_metrics = tag_dict(test_dict, prefix=f"{split_name}_")
