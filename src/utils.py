@@ -3,8 +3,10 @@ from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
+import wandb.sdk
 
 REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -60,7 +62,7 @@ def plot_errorbar(
     lo_q: float = 0,
     mid_q: float = 0.5,
     hi_q: float = 1,
-    **plt_kwargs
+    **plt_kwargs,
 ):
     lo = np.quantile(ys, lo_q, axis=-1)
     mid = np.quantile(ys, mid_q, axis=-1)
@@ -70,5 +72,25 @@ def plot_errorbar(
         x=xs[mid != np.nan],
         y=mid[mid != np.nan],
         yerr=np.stack([mid - lo, hi - mid])[:, mid != np.nan],
-        **plt_kwargs
+        **plt_kwargs,
+    )
+
+
+def runs_to_df(runs: list[wandb.sdk.wandb_run.Run]):
+    def flatten_dict(d: dict, prefix: str = "") -> dict:
+        ret = dict()
+        for k, v in d.items():
+            if isinstance(v, dict):
+                ret |= flatten_dict(v, prefix=f"{k}_")
+            else:
+                ret[f"{prefix}{k}"] = v
+        return ret
+
+    return pd.DataFrame(
+        [
+            flatten_dict(r.summary._json_dict)  # type: ignore
+            | flatten_dict(r.config)
+            | {"name": r.name, "state": r.state}  # type: ignore
+            for r in runs
+        ]
     )
