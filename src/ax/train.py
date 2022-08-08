@@ -17,7 +17,7 @@ import wandb
 from simple_parsing import ArgumentParser
 from src.ax.attack.FastPGD import FastPGD
 from src.ax.data import cifar, synthetic
-from src.ax.models import wrn
+from src.ax.models import vit, wrn
 from torch import nn
 from tqdm.auto import tqdm
 
@@ -38,6 +38,7 @@ def tag_dict(
 
 class ModelT(enum.Enum):
     WideResNet = enum.auto()
+    VisionTransformer = enum.auto()
 
 
 class DatasetT(enum.Enum):
@@ -234,6 +235,20 @@ class ExperimentConfig:
                 num_classes=self.num_classes,
                 mean=self.data_mean,
                 std=self.data_std,
+            )
+
+        if self.model is ModelT.VisionTransformer:
+            return vit.get_mup_vit(
+                img_size=32,
+                num_input_channels=3,
+                num_classes=self.num_classes,
+                patch=8,
+                dropout=0,
+                num_layers=7,
+                head=12,
+                hidden=384,
+                mlp_hidden=384,
+                is_cls_token=False,
             )
 
         raise ValueError(self.model)
@@ -475,7 +490,9 @@ def train(
                 log_dict: dict[str, Metric] = dict()
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
-                    val_dict, val_imgs = evaluate(net, loader_val, attack_eval, cfg)
+                    val_dict, val_imgs = evaluate(
+                        net, loader_val, attack_eval, cfg
+                    )
                     net.train()
 
                     val_loss: float = val_dict["loss"].data
@@ -495,7 +512,7 @@ def train(
                             preds_adv=preds_adv,
                             labs=labs,
                             cfg=cfg,
-                            adv_eps=cfg.adv_eps_train
+                            adv_eps=cfg.adv_eps_train,
                         )
                     )
 

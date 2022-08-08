@@ -22,7 +22,6 @@ Augmented with https://github.com/microsoft/mup.
 from typing import Any, Type, Union
 
 import mup
-import mup.init
 import torch
 import torch.nn.functional as F
 from torch import nn
