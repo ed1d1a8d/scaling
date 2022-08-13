@@ -16,6 +16,7 @@ import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
 from src.ax.attack.FastPGD import FastPGD
+from src.ax.attack.FastAutoAttack import FastAutoAttack
 from src.ax.data import cifar, synthetic
 from src.ax.models import wrn
 from torch import nn
@@ -54,9 +55,7 @@ class ExperimentConfig:
     dataset: DatasetT = DatasetT.CIFAR5m
     LightDark_cfg: synthetic.LightDarkDSConfig = synthetic.LightDarkDSConfig()
     HVStripe_cfg: synthetic.HVStripeDSConfig = synthetic.HVStripeDSConfig()
-    SquareCircle_cfg: synthetic.SquareCircleDSConfig = (
-        synthetic.SquareCircleDSConfig()
-    )
+    SquareCircle_cfg: synthetic.SquareCircleDSConfig = synthetic.SquareCircleDSConfig()
 
     # model params
     model: ModelT = ModelT.WideResNet
@@ -171,9 +170,7 @@ class ExperimentConfig:
 
     def get_loader_val(self):
         if self.dataset is DatasetT.CIFAR5m:
-            return cifar.get_loader(
-                split="val", batch_size=self.eval_batch_size
-            )
+            return cifar.get_loader(split="val", batch_size=self.eval_batch_size)
 
         if self.dataset is DatasetT.CIFAR10:
             return cifar.get_loader(
@@ -200,9 +197,7 @@ class ExperimentConfig:
                 "train_orig": cifar.get_loader(
                     split="train-orig", batch_size=self.eval_batch_size
                 ),
-                "test": cifar.get_loader(
-                    split="test", batch_size=self.eval_batch_size
-                ),
+                "test": cifar.get_loader(split="test", batch_size=self.eval_batch_size),
             }
 
         if self.dataset is DatasetT.CIFAR10:
@@ -346,12 +341,8 @@ def evaluate(
                     logits_nat = net(imgs_nat)
                     logits_adv = net(imgs_adv)
 
-                    loss_nat = F.cross_entropy(
-                        logits_nat, labs, reduction="sum"
-                    )
-                    loss_adv = F.cross_entropy(
-                        logits_adv, labs, reduction="sum"
-                    )
+                    loss_nat = F.cross_entropy(logits_nat, labs, reduction="sum")
+                    loss_adv = F.cross_entropy(logits_adv, labs, reduction="sum")
 
             preds_nat = logits_nat.argmax(dim=-1)
             preds_adv = logits_adv.argmax(dim=-1)
@@ -432,9 +423,7 @@ def train(
 
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
-                    print(
-                        "Validation loss has stopped improving. Stopping training..."
-                    )
+                    print("Validation loss has stopped improving. Stopping training...")
                     return
 
                 imgs_adv: torch.Tensor = attack_train(imgs_nat, labs)
@@ -495,7 +484,7 @@ def train(
                             preds_adv=preds_adv,
                             labs=labs,
                             cfg=cfg,
-                            adv_eps=cfg.adv_eps_train
+                            adv_eps=cfg.adv_eps_train,
                         )
                     )
 
@@ -530,16 +519,30 @@ def run_experiment(cfg: ExperimentConfig):
         steps=cfg.pgd_steps,
         random_start=True,
     )
-    attack_eval = FastPGD(
+
+    attack_val = FastPGD(
         model=net,
-        eps=cfg.adv_eps_eval,
-        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
+        eps=cfg.adv_eps_train,
+        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
     )
 
+    # attack_eval = FastPGD(
+    #    model=net,
+    #    eps=cfg.adv_eps_eval,
+    #    alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
+    #    steps=cfg.pgd_steps,
+    #    random_start=True,
+    # )
+
+    attack_eval = FastAutoAttack(
+        net,
+        eps=cfg.adv_eps_eval
+    )
+
     try:
-        train(net, attack_train, attack_eval, cfg)
+        train(net, attack_train, attack_val, cfg)
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 

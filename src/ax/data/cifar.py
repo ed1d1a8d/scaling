@@ -1,16 +1,13 @@
 import os
 from typing import Optional, Sequence
 
-import git.repo
 import torch
 import torchvision
 from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder
 from ffcv.loader import Loader, OrderOption
 from ffcv.transforms import Convert, Squeeze, ToDevice, ToTensor, ToTorchImage
 
-GIT_ROOT = str(
-    git.repo.Repo(".", search_parent_directories=True).working_tree_dir
-)
+CIFAR_ROOT = "/home/gridsan/groups/ccg/data/scaling/cifar5m"
 
 
 def cls_name(idx: int) -> str:
@@ -62,7 +59,7 @@ def get_loader(
     ]
 
     loader = Loader(
-        os.path.join(GIT_ROOT, f"data/cifar5m/{split}.beton"),
+        os.path.join(CIFAR_ROOT, f"{split}.beton"),
         batch_size=batch_size,
         num_workers=num_workers,
         os_cache=os_cache,
