@@ -11,10 +11,10 @@ import torch
 import torch.cuda.amp
 import torch.nn.functional as F
 import torch.utils.data
-import torchattacks.attack
 import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
+from src.ax.attack.FastAutoAttack import FastAutoAttack
 from src.ax.attack.FastPGD import FastPGD
 from src.ax.data import cifar, synthetic
 from src.ax.models import vit, wrn
@@ -80,8 +80,9 @@ class ExperimentConfig:
 
     # attack parameter only for CIFAR-10 and SVHN
     adv_eps_train: float = 8 / 255
-    adv_eps_eval: float = 8 / 255
+    adv_eps_test: float = 8 / 255
     pgd_steps: int = 10
+    use_autoattack: bool = True
 
     # Other params
     seed: int = 42
@@ -332,14 +333,10 @@ def get_imgs_to_log(
 def evaluate(
     net: nn.Module,
     loader: Union[ffcv.loader.Loader, torch.utils.data.DataLoader],
-    attack: torchattacks.attack.Attack,
+    attack: Union[FastPGD, FastAutoAttack],
     cfg: ExperimentConfig,
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
-    n: int = (
-        len(loader.indices)
-        if isinstance(loader, ffcv.loader.Loader)
-        else len(loader.dataset)  # type: ignore
-    )
+    n: int = len(loader.indices) if isinstance(loader, ffcv.loader.Loader) else len(loader.dataset)  # type: ignore
 
     n_correct_nat: float = 0
     n_correct_adv: float = 0
@@ -385,7 +382,7 @@ def evaluate(
                     preds_adv=preds_adv,
                     labs=labs,
                     cfg=cfg,
-                    adv_eps=cfg.adv_eps_eval,
+                    adv_eps=attack.eps,
                 )
 
             pbar.update(1)
@@ -411,8 +408,8 @@ def evaluate(
 
 def train(
     net: nn.Module,
-    attack_train: torchattacks.attack.Attack,
-    attack_eval: torchattacks.attack.Attack,
+    attack_train: FastPGD,
+    attack_val: FastPGD,
     cfg: ExperimentConfig,
 ):
     loader_train = cfg.get_loader_train()
@@ -491,7 +488,7 @@ def train(
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
                     val_dict, val_imgs = evaluate(
-                        net, loader_val, attack_eval, cfg
+                        net, loader_val, attack_val, cfg
                     )
                     net.train()
 
@@ -547,16 +544,23 @@ def run_experiment(cfg: ExperimentConfig):
         steps=cfg.pgd_steps,
         random_start=True,
     )
-    attack_eval = FastPGD(
+
+    attack_val = FastPGD(
         model=net,
-        eps=cfg.adv_eps_eval,
-        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
+        eps=cfg.adv_eps_test,
+        alpha=cfg.adv_eps_test / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
     )
 
+    attack_test = (
+        FastAutoAttack(net, eps=cfg.adv_eps_test)
+        if cfg.use_autoattack
+        else attack_val
+    )
+
     try:
-        train(net, attack_train, attack_eval, cfg)
+        train(net, attack_train, attack_val, cfg)
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
@@ -566,7 +570,7 @@ def run_experiment(cfg: ExperimentConfig):
     net.eval()
     for split_name, loader in test_loaders.items():
         print(f"Starting evaluation of {split_name} split...")
-        test_dict, test_imgs = evaluate(net, loader, attack_eval, cfg)
+        test_dict, test_imgs = evaluate(net, loader, attack_test, cfg)
 
         wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
         test_metrics = tag_dict(test_dict, prefix=f"{split_name}_")
