@@ -16,6 +16,7 @@ import wandb
 from simple_parsing import ArgumentParser
 from src.ax.attack.FastAutoAttack import FastAutoAttack
 from src.ax.attack.FastPGD import FastPGD
+from src.ax.attack.teacher_loss import TeacherCrossEntropy
 from src.ax.data import cifar, synthetic
 from src.ax.models import vit, wrn
 from torch import nn
@@ -59,6 +60,8 @@ class ExperimentConfig:
         synthetic.SquareCircleDSConfig()
     )
 
+    teacher_ckpt_path: Optional[str] = None
+
     # model params
     model: ModelT = ModelT.WideResNet
     depth: int = 28
@@ -82,7 +85,7 @@ class ExperimentConfig:
     adv_eps_train: float = 8 / 255
     adv_eps_eval: float = 8 / 255
     pgd_steps: int = 10
-    use_autoattack: bool = True
+    use_autoattack: bool = False
 
     # Other params
     seed: int = 42
@@ -92,6 +95,11 @@ class ExperimentConfig:
 
     def __post_init__(self):
         self.batch_size = min(self.batch_size, self.n_train)
+
+        # We currently don't support running student teacher with autoattack.
+        assert not (
+            self.use_autoattack and (self.teacher_ckpt_path is not None)
+        )
 
     @property
     def steps_per_eval(self):
@@ -302,19 +310,21 @@ def get_imgs_to_log(
     imgs_adv: torch.Tensor,
     preds_nat: torch.Tensor,
     preds_adv: torch.Tensor,
-    labs: torch.Tensor,
+    labs_nat: torch.Tensor,
+    labs_adv: torch.Tensor,
     cfg: ExperimentConfig,
     adv_eps: float,
 ) -> list[wandb.Image]:
     imgs_diff = (imgs_adv - imgs_nat) / adv_eps / (2 + 1e-9) + 0.5
 
     def get_caption(i: int) -> str:
-        lab = cifar.cls_name(int(labs[i].item()))
+        lab_nat = cifar.cls_name(int(labs_nat[i].item()))
+        lab_adv = cifar.cls_name(int(labs_adv[i].item()))
         pred_nat = cifar.cls_name(int(preds_nat[i].item()))
         pred_adv = cifar.cls_name(int(preds_adv[i].item()))
         return "\n".join(
             [
-                f"preds: {pred_nat}, {pred_adv}; true: {lab}",
+                f"preds: {pred_nat}, {pred_adv}; true: ({lab_nat}, {lab_adv})",
                 f"img order: nat, adv, diff",
             ]
         )
@@ -335,6 +345,7 @@ def evaluate(
     loader: Union[ffcv.loader.Loader, torch.utils.data.DataLoader],
     attack: Union[FastPGD, FastAutoAttack],
     cfg: ExperimentConfig,
+    teacher_net: Optional[nn.Module],
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
     n: int = len(loader.indices) if isinstance(loader, ffcv.loader.Loader) else len(loader.dataset)  # type: ignore
 
@@ -344,14 +355,26 @@ def evaluate(
     tot_loss_adv: float = 0
 
     imgs_nat: torch.Tensor
-    labs: torch.Tensor
+    orig_labs: torch.Tensor
     imgs_to_log: list[wandb.Image] = []
     with tqdm(total=len(loader)) as pbar:
-        for (imgs_nat, labs) in loader:
+        for (imgs_nat, orig_labs) in loader:
             imgs_nat = imgs_nat.cuda()
-            labs = labs.cuda()
+            orig_labs = orig_labs.cuda()
 
-            imgs_adv: torch.Tensor = attack(imgs_nat, labs)
+            imgs_adv: torch.Tensor = attack(imgs_nat, orig_labs)
+
+            with torch.no_grad():
+                labs_nat = (
+                    orig_labs
+                    if teacher_net is None
+                    else teacher_net(imgs_nat).argmax(dim=-1)
+                )
+                labs_adv = (
+                    orig_labs
+                    if teacher_net is None
+                    else teacher_net(imgs_adv).argmax(dim=-1)
+                )
 
             with torch.autocast("cuda"):  # type: ignore
                 with torch.no_grad():
@@ -359,17 +382,17 @@ def evaluate(
                     logits_adv = net(imgs_adv)
 
                     loss_nat = F.cross_entropy(
-                        logits_nat, labs, reduction="sum"
+                        logits_nat, labs_nat, reduction="sum"
                     )
                     loss_adv = F.cross_entropy(
-                        logits_adv, labs, reduction="sum"
+                        logits_adv, labs_adv, reduction="sum"
                     )
 
             preds_nat = logits_nat.argmax(dim=-1)
             preds_adv = logits_adv.argmax(dim=-1)
 
-            n_correct_nat += preds_nat.eq(labs).sum().item()
-            n_correct_adv += preds_adv.eq(labs).sum().item()
+            n_correct_nat += preds_nat.eq(labs_nat).sum().item()
+            n_correct_adv += preds_adv.eq(labs_adv).sum().item()
 
             tot_loss_nat += loss_nat.item()
             tot_loss_adv += loss_adv.item()
@@ -380,7 +403,8 @@ def evaluate(
                     imgs_adv=imgs_adv,
                     preds_nat=preds_nat,
                     preds_adv=preds_adv,
-                    labs=labs,
+                    labs_nat=labs_nat,
+                    labs_adv=labs_adv,
                     cfg=cfg,
                     adv_eps=attack.eps,
                 )
@@ -411,6 +435,7 @@ def train(
     attack_train: FastPGD,
     attack_val: FastPGD,
     cfg: ExperimentConfig,
+    teacher_net: Optional[nn.Module],
 ):
     loader_train = cfg.get_loader_train()
     loader_val = cfg.get_loader_val()
@@ -437,10 +462,10 @@ def train(
     with tqdm() as pbar:
         while True:  # Termination will be handled outside
             imgs_nat: torch.Tensor
-            labs: torch.Tensor
-            for (imgs_nat, labs) in loader_train:
+            orig_labs: torch.Tensor
+            for (imgs_nat, orig_labs) in loader_train:
                 imgs_nat = imgs_nat.cuda()
-                labs = labs.cuda()
+                orig_labs = orig_labs.cuda()
 
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
@@ -449,28 +474,40 @@ def train(
                     )
                     return
 
-                imgs_adv: torch.Tensor = attack_train(imgs_nat, labs)
+                imgs_adv: torch.Tensor = attack_train(imgs_nat, orig_labs)
+
+                with torch.no_grad():
+                    labs_nat = (
+                        orig_labs
+                        if teacher_net is None
+                        else teacher_net(imgs_nat).argmax(dim=-1)
+                    )
+                    labs_adv = (
+                        orig_labs
+                        if teacher_net is None
+                        else teacher_net(imgs_adv).argmax(dim=-1)
+                    )
 
                 with torch.autocast("cuda"):  # type: ignore
                     if cfg.do_adv_training:
                         logits_adv = net(imgs_adv)
-                        loss_adv = F.cross_entropy(logits_adv, labs)
+                        loss_adv = F.cross_entropy(logits_adv, labs_adv)
                         loss = loss_adv
                         with torch.no_grad():
                             logits_nat = net(imgs_nat)
-                            loss_nat = F.cross_entropy(logits_nat, labs)
+                            loss_nat = F.cross_entropy(logits_nat, labs_nat)
                     else:
                         logits_nat = net(imgs_nat)
-                        loss_nat = F.cross_entropy(logits_nat, labs)
+                        loss_nat = F.cross_entropy(logits_nat, labs_nat)
                         loss = loss_nat
                         with torch.no_grad():
                             logits_adv = net(imgs_adv)
-                            loss_adv = F.cross_entropy(logits_adv, labs)
+                            loss_adv = F.cross_entropy(logits_adv, labs_adv)
 
                 preds_nat = logits_nat.argmax(dim=-1)
                 preds_adv = logits_adv.argmax(dim=-1)
-                acc_nat: float = preds_nat.eq(labs).float().mean().item()
-                acc_adv: float = preds_adv.eq(labs).float().mean().item()
+                acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
+                acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
                 acc = acc_adv if cfg.do_adv_training else acc_nat
 
                 optimizer.zero_grad()
@@ -488,7 +525,7 @@ def train(
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
                     val_dict, val_imgs = evaluate(
-                        net, loader_val, attack_val, cfg
+                        net, loader_val, attack_val, cfg, teacher_net
                     )
                     net.train()
 
@@ -507,7 +544,8 @@ def train(
                             imgs_adv=imgs_adv,
                             preds_nat=preds_nat,
                             preds_adv=preds_adv,
-                            labs=labs,
+                            labs_nat=labs_nat,
+                            labs_adv=labs_adv,
                             cfg=cfg,
                             adv_eps=cfg.adv_eps_train,
                         )
@@ -537,12 +575,24 @@ def run_experiment(cfg: ExperimentConfig):
     net: nn.Module = cfg.get_net().cuda()
     net = net.to(memory_format=torch.channels_last)  # type: ignore
 
+    teacher_net: Optional[nn.Module] = None
+    if cfg.teacher_ckpt_path is not None:
+        teacher_net = cfg.get_net().cuda()
+        teacher_net = teacher_net.to(memory_format=torch.channels_last)  # type: ignore
+        teacher_net.load_state_dict(torch.load(cfg.teacher_ckpt_path))  # type: ignore
+        teacher_net.eval()  # type: ignore
+
+    attack_loss = (
+        None if teacher_net is None else TeacherCrossEntropy(teacher_net)
+    )
+
     attack_train = FastPGD(
         model=net,
         eps=cfg.adv_eps_train,
         alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
+        loss=attack_loss,
     )
 
     attack_val = FastPGD(
@@ -551,6 +601,7 @@ def run_experiment(cfg: ExperimentConfig):
         alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
+        loss=attack_loss,
     )
 
     attack_test = (
@@ -560,7 +611,7 @@ def run_experiment(cfg: ExperimentConfig):
     )
 
     try:
-        train(net, attack_train, attack_val, cfg)
+        train(net, attack_train, attack_val, cfg, teacher_net)
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
@@ -570,10 +621,16 @@ def run_experiment(cfg: ExperimentConfig):
     net.eval()
     for split_name, loader in test_loaders.items():
         print(f"Starting evaluation of {split_name} split...")
-        test_dict, test_imgs = evaluate(net, loader, attack_test, cfg)
+        test_dict, test_imgs = evaluate(
+            net, loader, attack_test, cfg, teacher_net
+        )
 
         wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
-        test_metrics = tag_dict(test_dict, prefix=f"{split_name}_")
+        test_metrics = tag_dict(
+            test_dict,
+            prefix=f"{split_name}_",
+            suffix="_autoattack" if cfg.use_autoattack else "",
+        )
         for name, metric in test_metrics.items():
             wandb.run.summary[name] = metric.data  # type: ignore
 

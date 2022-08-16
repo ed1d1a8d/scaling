@@ -1,12 +1,19 @@
 import torch
 import torch.nn as nn
+from src.ax.attack.teacher_loss import TeacherCrossEntropy
 from torch.cuda.amp import GradScaler, autocast
 from torchattacks.attack import Attack
 
 
 class FastPGD(Attack):
     def __init__(
-        self, model, eps=0.3, alpha=2 / 255, steps=40, random_start=True
+        self,
+        model,
+        eps=0.3,
+        alpha=2 / 255,
+        steps=40,
+        random_start=True,
+        loss=None,
     ):
         super().__init__("FastPGD", model)
         self.eps = eps
@@ -15,6 +22,7 @@ class FastPGD(Attack):
         self.random_start = random_start
         self._supported_mode = ["default", "targeted"]
         self.scaler = GradScaler()
+        self.loss = nn.CrossEntropyLoss() if loss is None else loss
 
     def forward(self, images, labels):
         r"""
@@ -26,7 +34,7 @@ class FastPGD(Attack):
         if self._targeted:
             target_labels = self._get_target_label(images, labels)
 
-        loss = nn.CrossEntropyLoss()
+        loss = self.loss
 
         adv_images = images.clone().detach()
 
@@ -45,7 +53,11 @@ class FastPGD(Attack):
                 outputs = self.model(adv_images)
 
                 # Calculate loss
-                if self._targeted:
+                if isinstance(loss, TeacherCrossEntropy):
+                    cost = loss.get_loss(
+                        inputs=adv_images, student_logits=outputs
+                    )  # type: ignore
+                elif self._targeted:
                     cost = -loss(outputs, target_labels)
                 else:
                     cost = loss(outputs, labels)
