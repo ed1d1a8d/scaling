@@ -6,6 +6,7 @@ import torchvision
 from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder
 from ffcv.loader import Loader, OrderOption
 from ffcv.transforms import Convert, Squeeze, ToDevice, ToTensor, ToTorchImage
+import torch.distributed as dist
 
 CIFAR_ROOT = "/home/gridsan/groups/ccg/data/scaling/cifar5m"
 
@@ -38,7 +39,7 @@ def get_loader(
     Returns a loader for the first n elements of the split.
     If n is none, returns the entire split.
     """
-    device = f"cuda:{torch.cuda.current_device()}"
+    device = f"cuda:{dist.get_rank()}"
 
     label_pipeline = [
         IntDecoder(),
@@ -68,6 +69,7 @@ def get_loader(
         pipelines={"image": image_pipeline, "label": label_pipeline},
         seed=seed,
         indices=indices,  # type: ignore
+        distributed=True
     )
     assert (indices is None) or (max(indices) < loader.reader.num_samples)
 

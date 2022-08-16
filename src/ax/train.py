@@ -1,3 +1,4 @@
+from ntpath import join
 import dataclasses
 import enum
 import os
@@ -21,6 +22,28 @@ from src.ax.data import cifar, synthetic
 from src.ax.models import vit, wrn
 from torch import nn
 from tqdm.auto import tqdm
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+def setup(rank, world_size):
+    '''sets up distributed data parallelism'''
+    
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    # initialize the process group
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+def cleanup():
+    '''cleans up after data parallelism'''
+    dist.destroy_process_group()
+
+def cross_entropy(A,B,reduction="mean"):
+    if A.device!=B.device:
+        A=A.to(B.device)
+    print(A.device,B.device)
+    return F.cross_entropy(A,B,reduction=reduction)
 
 T = TypeVar("T")
 
@@ -53,7 +76,7 @@ class DatasetT(enum.Enum):
 @dataclasses.dataclass
 class ExperimentConfig:
     # dataset params
-    dataset: DatasetT = DatasetT.CIFAR5m
+    dataset: DatasetT = DatasetT.CIFAR10
     LightDark_cfg: synthetic.LightDarkDSConfig = synthetic.LightDarkDSConfig()
     HVStripe_cfg: synthetic.HVStripeDSConfig = synthetic.HVStripeDSConfig()
     SquareCircle_cfg: synthetic.SquareCircleDSConfig = (
@@ -381,10 +404,10 @@ def evaluate(
                     logits_nat = net(imgs_nat)
                     logits_adv = net(imgs_adv)
 
-                    loss_nat = F.cross_entropy(
+                    loss_nat = cross_entropy(
                         logits_nat, labs_nat, reduction="sum"
                     )
-                    loss_adv = F.cross_entropy(
+                    loss_adv = cross_entropy(
                         logits_adv, labs_adv, reduction="sum"
                     )
 
@@ -464,8 +487,6 @@ def train(
             imgs_nat: torch.Tensor
             orig_labs: torch.Tensor
             for (imgs_nat, orig_labs) in loader_train:
-                imgs_nat = imgs_nat.cuda()
-                orig_labs = orig_labs.cuda()
 
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
@@ -491,21 +512,22 @@ def train(
                 with torch.autocast("cuda"):  # type: ignore
                     if cfg.do_adv_training:
                         logits_adv = net(imgs_adv)
-                        loss_adv = F.cross_entropy(logits_adv, labs_adv)
+                        loss_adv = cross_entropy(logits_adv, labs_adv)
                         loss = loss_adv
                         with torch.no_grad():
                             logits_nat = net(imgs_nat)
-                            loss_nat = F.cross_entropy(logits_nat, labs_nat)
+                            loss_nat = cross_entropy(logits_nat, labs_nat)
                     else:
                         logits_nat = net(imgs_nat)
-                        loss_nat = F.cross_entropy(logits_nat, labs_nat)
+                        loss_nat = cross_entropy(logits_nat, labs_nat)
                         loss = loss_nat
                         with torch.no_grad():
                             logits_adv = net(imgs_adv)
-                            loss_adv = F.cross_entropy(logits_adv, labs_adv)
+                            loss_adv = cross_entropy(logits_adv, labs_adv)
 
                 preds_nat = logits_nat.argmax(dim=-1)
                 preds_adv = logits_adv.argmax(dim=-1)
+                print(dist.get_rank(),net.device,imgs_nat.device,orig_labs.device)
                 acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
                 acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
                 acc = acc_adv if cfg.do_adv_training else acc_nat
@@ -569,11 +591,13 @@ def train(
             n_epochs += 1
 
 
-def run_experiment(cfg: ExperimentConfig):
+def run_experiment(rank,cfg: ExperimentConfig,world_size):
     torch.manual_seed(cfg.seed)
+    setup(rank,world_size)
 
-    net: nn.Module = cfg.get_net().cuda()
+    net: nn.Module = cfg.get_net().to(rank)
     net = net.to(memory_format=torch.channels_last)  # type: ignore
+    net = DDP(net,device_ids=[rank],output_device=rank)
 
     teacher_net: Optional[nn.Module] = None
     if cfg.teacher_ckpt_path is not None:
@@ -615,6 +639,7 @@ def run_experiment(cfg: ExperimentConfig):
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
+    cleanup()
     load_model(net)
 
     test_loaders = cfg.get_test_loaders()
@@ -657,7 +682,8 @@ def main():
         save_code=True,
     )
 
-    run_experiment(cfg)
+    world_size=torch.cuda.device_count()
+    mp.spawn(run_experiment,args=(cfg,world_size),nprocs=world_size,join=True)
 
 
 if __name__ == "__main__":
