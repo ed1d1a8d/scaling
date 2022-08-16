@@ -77,15 +77,13 @@ def update_run(row: _ExperimentRow):
 
         test_metrics = {
             k: v.data
-            for k, v in tag_dict(test_dict, prefix=f"{split_name}_").items()
+            for k, v in tag_dict(
+                test_dict, prefix=f"{split_name}_", suffix=f"_autoattack"
+            ).items()
         }
-        old_test_metrics = tag_dict(
-            {k: run.summary[k] for k in test_metrics.keys()}, suffix="_pgd_old"
-        )
 
-        wandb.Image
         # Update run
-        run.summary.update(test_metrics | old_test_metrics)
+        run.summary.update(test_metrics)
         wandb_run_save_objs(
             run,
             {
@@ -115,17 +113,17 @@ def main():
     # Collect runs
     runs: list[wandb.apis.public.Run] = API.runs(
         f"data-frugal-learning/adv-train",
-        # filters={
-        #     "$and": [
-        #         {"$not": {"tags": {"$in": ["test"]}}},
-        #         {
-        #             "config.dataset": {
-        #                 "$in": ["DatasetT.CIFAR10", "DatasetT.CIFAR5m", None]
-        #             }
-        #         },
-        #     ]
-        # },
-        filters={"tags": {"$in": ["test"]}},
+        filters={
+            "$and": [
+                {"$not": {"tags": {"$in": ["test"]}}},
+                {
+                    "config.dataset": {
+                        "$in": ["DatasetT.CIFAR10", "DatasetT.CIFAR5m", None]
+                    }
+                },
+            ]
+        },
+        # filters={"tags": {"$in": ["test"]}},
     )
 
     # Parse runs into dataframe
