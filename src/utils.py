@@ -1,12 +1,20 @@
+import contextlib
+import datetime
+import io
+import os
 import pathlib
-from typing import Callable
+import tempfile
+from typing import Callable, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import PIL.Image
 import torch
 import torch.nn.functional as F
-import wandb.sdk
+import wandb
+import wandb.apis
+from wandb.apis.internal import Api as InternalApi
 
 REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -76,7 +84,7 @@ def plot_errorbar(
     )
 
 
-def runs_to_df(runs: list[wandb.sdk.wandb_run.Run]):
+def runs_to_df(runs: list[wandb.apis.public.Run]):
     def flatten_dict(d: dict, prefix: str = "") -> dict:
         ret = dict()
         for k, v in d.items():
@@ -90,7 +98,47 @@ def runs_to_df(runs: list[wandb.sdk.wandb_run.Run]):
         [
             flatten_dict(r.summary._json_dict)  # type: ignore
             | flatten_dict(r.config)
-            | {"name": r.name, "state": r.state}  # type: ignore
+            | {
+                "id": r.id,
+                "run_path": "/".join(r.path),
+                "name": r.name,
+                "state": r.state,
+            }
             for r in runs
         ]
     )
+
+
+def wandb_run_save_objs(
+    run: wandb.apis.public.Run,
+    img_dict: dict[str, Union[PIL.Image.Image, str]],
+    extension: str = "png",
+):
+    """
+    img_dict is a dict mapping wandb_file_paths to Images.
+    wandb_file_paths are w.r.t. to the cloud wandb run storage.
+    """
+    iapi = InternalApi(
+        default_settings={"entity": run.entity, "project": run.project},
+        retry_timedelta=datetime.timedelta(seconds=20),
+    )
+    iapi.set_current_run_id(run.id)
+
+    # See https://stackoverflow.com/a/49010489/1337463 for an ExitStack tutorial.
+    with tempfile.TemporaryDirectory() as td:
+        with contextlib.ExitStack() as stack:
+            push_dict: dict[str, io.IOBase] = {}
+            for idx, (wandb_file_path, obj) in enumerate(img_dict.items()):
+                save_path = os.path.join(td, f"{idx}.png")
+
+                if isinstance(obj, PIL.Image.Image):
+                    assert wandb_file_path.endswith(extension)
+                    obj.save(save_path, format=extension)
+                else:
+                    pathlib.Path(save_path).write_text(obj)
+
+                push_dict[wandb_file_path] = stack.enter_context(
+                    open(save_path, mode="rb")
+                )
+
+            iapi.push(push_dict)

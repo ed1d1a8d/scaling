@@ -80,7 +80,7 @@ class ExperimentConfig:
 
     # attack parameter only for CIFAR-10 and SVHN
     adv_eps_train: float = 8 / 255
-    adv_eps_test: float = 8 / 255
+    adv_eps_eval: float = 8 / 255
     pgd_steps: int = 10
     use_autoattack: bool = True
 
@@ -547,14 +547,14 @@ def run_experiment(cfg: ExperimentConfig):
 
     attack_val = FastPGD(
         model=net,
-        eps=cfg.adv_eps_test,
-        alpha=cfg.adv_eps_test / cfg.pgd_steps * 2.3,
+        eps=cfg.adv_eps_eval,
+        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
         steps=cfg.pgd_steps,
         random_start=True,
     )
 
     attack_test = (
-        FastAutoAttack(net, eps=cfg.adv_eps_test)
+        FastAutoAttack(net, eps=cfg.adv_eps_eval)
         if cfg.use_autoattack
         else attack_val
     )
