@@ -2,8 +2,8 @@ import torch
 from torch.cuda.amp import autocast
 from torchattacks.attack import Attack
 
-class FastMultiAttack(Attack):
 
+class FastMultiAttack(Attack):
     def __init__(self, attacks, verbose=False):
 
         # Check validity
@@ -12,13 +12,15 @@ class FastMultiAttack(Attack):
             ids.append(id(attack.model))
 
         if len(set(ids)) != 1:
-            raise ValueError("At least one of attacks is referencing a different model.")
+            raise ValueError(
+                "At least one of attacks is referencing a different model."
+            )
 
         super().__init__("MultiAttack", attack.model)
         self.attacks = attacks
         self.verbose = verbose
         self._multi_atk_records = [0.0]
-        self._supported_mode = ['default']
+        self._supported_mode = ["default"]
 
     def forward(self, images, labels):
         r"""
@@ -38,11 +40,13 @@ class FastMultiAttack(Attack):
                 outputs = self.model(adv_images)
             _, pre = torch.max(outputs.data, 1)
 
-            corrects = (pre == labels[fails])
+            corrects = pre == labels[fails]
             wrongs = ~corrects
 
             succeeds = torch.masked_select(fails, wrongs)
-            succeeds_of_fails = torch.masked_select(torch.arange(fails.shape[0]).to(self.device), wrongs)
+            succeeds_of_fails = torch.masked_select(
+                torch.arange(fails.shape[0]).to(self.device), wrongs
+            )
 
             final_images[succeeds] = adv_images[succeeds_of_fails]
 
