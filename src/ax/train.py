@@ -39,12 +39,6 @@ def cleanup():
     '''cleans up after data parallelism'''
     dist.destroy_process_group()
 
-def cross_entropy(A,B,reduction="mean"):
-    if A.device!=B.device:
-        A=A.to(B.device)
-    print(A.device,B.device)
-    return F.cross_entropy(A,B,reduction=reduction)
-
 T = TypeVar("T")
 
 
@@ -382,8 +376,6 @@ def evaluate(
     imgs_to_log: list[wandb.Image] = []
     with tqdm(total=len(loader)) as pbar:
         for (imgs_nat, orig_labs) in loader:
-            imgs_nat = imgs_nat.cuda()
-            orig_labs = orig_labs.cuda()
 
             imgs_adv: torch.Tensor = attack(imgs_nat, orig_labs)
 
@@ -404,10 +396,10 @@ def evaluate(
                     logits_nat = net(imgs_nat)
                     logits_adv = net(imgs_adv)
 
-                    loss_nat = cross_entropy(
+                    loss_nat = F.cross_entropy(
                         logits_nat, labs_nat, reduction="sum"
                     )
-                    loss_adv = cross_entropy(
+                    loss_adv = F.cross_entropy(
                         logits_adv, labs_adv, reduction="sum"
                     )
 
@@ -454,6 +446,7 @@ def evaluate(
 
 
 def train(
+    rank,
     net: nn.Module,
     attack_train: FastPGD,
     attack_val: FastPGD,
@@ -512,22 +505,21 @@ def train(
                 with torch.autocast("cuda"):  # type: ignore
                     if cfg.do_adv_training:
                         logits_adv = net(imgs_adv)
-                        loss_adv = cross_entropy(logits_adv, labs_adv)
+                        loss_adv = F.cross_entropy(logits_adv, labs_adv)
                         loss = loss_adv
                         with torch.no_grad():
                             logits_nat = net(imgs_nat)
-                            loss_nat = cross_entropy(logits_nat, labs_nat)
+                            loss_nat = F.cross_entropy(logits_nat, labs_nat)
                     else:
                         logits_nat = net(imgs_nat)
-                        loss_nat = cross_entropy(logits_nat, labs_nat)
+                        loss_nat = F.cross_entropy(logits_nat, labs_nat)
                         loss = loss_nat
                         with torch.no_grad():
                             logits_adv = net(imgs_adv)
-                            loss_adv = cross_entropy(logits_adv, labs_adv)
+                            loss_adv = F.cross_entropy(logits_adv, labs_adv)
 
                 preds_nat = logits_nat.argmax(dim=-1)
                 preds_adv = logits_adv.argmax(dim=-1)
-                print(dist.get_rank(),net.device,imgs_nat.device,orig_labs.device)
                 acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
                 acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
                 acc = acc_adv if cfg.do_adv_training else acc_nat
@@ -543,50 +535,51 @@ def train(
                     f"epochs={n_epochs}; loss={loss.item():6e}; acc={acc:.4f}; lr={cur_lr:6e}"
                 )
 
-                log_dict: dict[str, Metric] = dict()
-                if n_steps % cfg.steps_per_eval == 1:
-                    net.eval()
-                    val_dict, val_imgs = evaluate(
-                        net, loader_val, attack_val, cfg, teacher_net
-                    )
-                    net.train()
-
-                    val_loss: float = val_dict["loss"].data
-                    lr_scheduler.step(val_loss)
-                    if val_loss < min_val_loss:
-                        min_val_loss = val_loss
-                        wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
-                        save_model(net)
-
-                    log_dict |= tag_dict(val_dict, prefix=f"val_")
-                    log_dict["val_imgs"] = Metric(val_imgs)
-                    log_dict["train_imgs"] = Metric(
-                        get_imgs_to_log(
-                            imgs_nat=imgs_nat,
-                            imgs_adv=imgs_adv,
-                            preds_nat=preds_nat,
-                            preds_adv=preds_adv,
-                            labs_nat=labs_nat,
-                            labs_adv=labs_adv,
-                            cfg=cfg,
-                            adv_eps=cfg.adv_eps_train,
+                if rank==0:
+                    log_dict: dict[str, Metric] = dict()
+                    if n_steps % cfg.steps_per_eval == 1:
+                        net.eval()
+                        val_dict, val_imgs = evaluate(
+                            net, loader_val, attack_val, cfg, teacher_net
                         )
-                    )
+                        net.train()
 
-                wandb_log(
-                    dict(
-                        step=Metric(n_steps),
-                        epoch=Metric(n_epochs),
-                        lr=Metric(cur_lr),
-                        train_loss=Metric(loss.item(), "min"),
-                        train_acc=Metric(acc, "max"),
-                        train_loss_nat=Metric(loss_nat.item(), "min"),
-                        train_loss_adv=Metric(loss_adv.item(), "min"),
-                        train_acc_nat=Metric(acc_nat, "max"),
-                        train_acc_adv=Metric(acc_adv, "max"),
+                        val_loss: float = val_dict["loss"].data
+                        lr_scheduler.step(val_loss)
+                        if val_loss < min_val_loss:
+                            min_val_loss = val_loss
+                            wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
+                            save_model(net)
+
+                        log_dict |= tag_dict(val_dict, prefix=f"val_")
+                        log_dict["val_imgs"] = Metric(val_imgs)
+                        log_dict["train_imgs"] = Metric(
+                            get_imgs_to_log(
+                                imgs_nat=imgs_nat,
+                                imgs_adv=imgs_adv,
+                                preds_nat=preds_nat,
+                                preds_adv=preds_adv,
+                                labs_nat=labs_nat,
+                                labs_adv=labs_adv,
+                                cfg=cfg,
+                                adv_eps=cfg.adv_eps_train,
+                            )
+                        )
+
+                    wandb_log(
+                        dict(
+                            step=Metric(n_steps),
+                            epoch=Metric(n_epochs),
+                            lr=Metric(cur_lr),
+                            train_loss=Metric(loss.item(), "min"),
+                            train_acc=Metric(acc, "max"),
+                            train_loss_nat=Metric(loss_nat.item(), "min"),
+                            train_loss_adv=Metric(loss_adv.item(), "min"),
+                            train_acc_nat=Metric(acc_nat, "max"),
+                            train_acc_adv=Metric(acc_adv, "max"),
+                        )
+                        | log_dict
                     )
-                    | log_dict
-                )
 
             n_epochs += 1
 
@@ -597,6 +590,7 @@ def run_experiment(rank,cfg: ExperimentConfig,world_size):
 
     net: nn.Module = cfg.get_net().to(rank)
     net = net.to(memory_format=torch.channels_last)  # type: ignore
+    net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net = DDP(net,device_ids=[rank],output_device=rank)
 
     teacher_net: Optional[nn.Module] = None
@@ -634,32 +628,44 @@ def run_experiment(rank,cfg: ExperimentConfig,world_size):
         else attack_val
     )
 
+    if rank==0:
+        wandb.init(
+            entity="data-frugal-learning",
+            project="adv-train",
+            dir=cfg.wandb_dir,
+            tags=cfg.tags,
+            config=dataclasses.asdict(cfg),
+            save_code=True,
+        )
+
     try:
-        train(net, attack_train, attack_val, cfg, teacher_net)
+        train(rank, net, attack_train, attack_val, cfg, teacher_net)
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
     cleanup()
     load_model(net)
 
-    test_loaders = cfg.get_test_loaders()
-    net.eval()
-    for split_name, loader in test_loaders.items():
-        print(f"Starting evaluation of {split_name} split...")
-        test_dict, test_imgs = evaluate(
-            net, loader, attack_test, cfg, teacher_net
-        )
+    if rank==0:
 
-        wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
-        test_metrics = tag_dict(
-            test_dict,
-            prefix=f"{split_name}_",
-            suffix="_autoattack" if cfg.use_autoattack else "",
-        )
-        for name, metric in test_metrics.items():
-            wandb.run.summary[name] = metric.data  # type: ignore
+        test_loaders = cfg.get_test_loaders()
+        net.eval()
+        for split_name, loader in test_loaders.items():
+            print(f"Starting evaluation of {split_name} split...")
+            test_dict, test_imgs = evaluate(
+                net, loader, attack_test, cfg, teacher_net
+            )
 
-        print(f"Finished evaluation of {split_name} split.")
+            wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
+            test_metrics = tag_dict(
+                test_dict,
+                prefix=f"{split_name}_",
+                suffix="_autoattack" if cfg.use_autoattack else "",
+            )
+            for name, metric in test_metrics.items():
+                wandb.run.summary[name] = metric.data  # type: ignore
+
+            print(f"Finished evaluation of {split_name} split.")
 
 
 def main():
@@ -671,16 +677,6 @@ def main():
 
     # Don't upload ckpt's to wandb, since they are big and are saved on supercloud.
     os.environ["WANDB_IGNORE_GLOBS"] = "*.ckpt"
-
-    # Initialize wandb
-    wandb.init(
-        entity="data-frugal-learning",
-        project="adv-train",
-        dir=cfg.wandb_dir,
-        tags=cfg.tags,
-        config=dataclasses.asdict(cfg),
-        save_code=True,
-    )
 
     world_size=torch.cuda.device_count()
     mp.spawn(run_experiment,args=(cfg,world_size),nprocs=world_size,join=True)
