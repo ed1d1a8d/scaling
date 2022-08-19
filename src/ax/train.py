@@ -284,7 +284,7 @@ class ExperimentConfig:
                 weight_decay=self.weight_decay,
             )
 
-        if self.optimizer is OptimizerT.AdamW:
+        if self.optimizer is OptimizerT.SGD:
             return mup.MuSGD(
                 net.parameters(),
                 lr=self.lr,
