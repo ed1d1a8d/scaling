@@ -50,6 +50,11 @@ class DatasetT(enum.Enum):
     SquareCircle = enum.auto()
 
 
+class OptimizerT(enum.Enum):
+    SGD = enum.auto()
+    AdamW = enum.auto()
+
+
 @dataclasses.dataclass
 class ExperimentConfig:
     # dataset params
@@ -59,6 +64,7 @@ class ExperimentConfig:
     SquareCircle_cfg: synthetic.SquareCircleDSConfig = (
         synthetic.SquareCircleDSConfig()
     )
+    data_augmentation: bool = False
 
     teacher_ckpt_path: Optional[str] = None
 
@@ -67,14 +73,18 @@ class ExperimentConfig:
     depth: int = 28
     width: int = 10  # Only applicable for wide nets
 
-    # train params
-    n_train: int = 2048
+    # optimizer params
+    optimizer: OptimizerT = OptimizerT.AdamW
+    momentum: float = 0.9  # only for SGD
     weight_decay: float = 5e-4
-    batch_size: int = 512
-    do_adv_training: bool = True
     lr: float = 1e-3
     min_lr: float = 1e-6
     lr_decay_patience_evals: int = 5
+
+    # train params
+    n_train: int = 2048
+    batch_size: int = 512
+    do_adv_training: bool = True
 
     # eval params
     eval_batch_size: int = 512
@@ -95,6 +105,8 @@ class ExperimentConfig:
 
     def __post_init__(self):
         self.batch_size = min(self.batch_size, self.n_train)
+
+        assert self.min_lr < self.lr
 
         # We currently don't support running student teacher with autoattack.
         assert not (
@@ -151,6 +163,7 @@ class ExperimentConfig:
         if self.dataset is DatasetT.CIFAR5m:
             return cifar.get_loader(
                 split="train",
+                augment=self.data_augmentation,
                 batch_size=self.batch_size,
                 indices=range(self.n_train),
                 random_order=True,
@@ -161,6 +174,7 @@ class ExperimentConfig:
         if self.dataset is DatasetT.CIFAR10:
             return cifar.get_loader(
                 split="train-orig",
+                augment=self.data_augmentation,
                 batch_size=self.batch_size,
                 indices=range(self.n_train),
                 random_order=True,
@@ -261,6 +275,24 @@ class ExperimentConfig:
             )
 
         raise ValueError(self.model)
+
+    def get_optimizer(self, net: nn.Module):
+        if self.optimizer is OptimizerT.AdamW:
+            return mup.MuAdamW(
+                net.parameters(),
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+            )
+
+        if self.optimizer is OptimizerT.AdamW:
+            return mup.MuSGD(
+                net.parameters(),
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                momentum=0.9,
+            )
+
+        raise ValueError(self.optimizer)
 
 
 @dataclasses.dataclass
@@ -441,11 +473,7 @@ def train(
     loader_val = cfg.get_loader_val()
     print("train and val loaders created!")
 
-    optimizer = mup.MuAdamW(
-        net.parameters(),
-        lr=cfg.lr,
-        weight_decay=cfg.weight_decay,
-    )
+    optimizer = cfg.get_optimizer(net)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optimizer,
         mode="min",

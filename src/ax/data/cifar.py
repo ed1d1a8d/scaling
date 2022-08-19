@@ -1,11 +1,11 @@
 import os
 from typing import Optional, Sequence
 
+import ffcv.transforms as transforms
 import torch
 import torchvision
 from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder
-from ffcv.loader import Loader, OrderOption
-from ffcv.transforms import Convert, Squeeze, ToDevice, ToTensor, ToTorchImage
+from ffcv.loader import Loader
 
 CIFAR_ROOT = "/home/gridsan/groups/ccg/data/scaling/cifar5m"
 
@@ -28,6 +28,7 @@ def cls_name(idx: int) -> str:
 def get_loader(
     split: str,
     batch_size: int,
+    augment: bool = False,
     indices: Optional[Sequence[int]] = None,
     num_workers: int = 20,
     random_order: bool = False,
@@ -42,21 +43,31 @@ def get_loader(
 
     label_pipeline = [
         IntDecoder(),
-        ToTensor(),
-        ToDevice(device),
-        Squeeze(),
+        transforms.ToTensor(),
+        transforms.ToDevice(device),
+        transforms.Squeeze(),
     ]
 
-    image_pipeline = [
-        SimpleRGBImageDecoder(),
-        ToTensor(),
-        ToDevice(device),
-        ToTorchImage(channels_last=True),
-        Convert(torch.float16),
-        torchvision.transforms.Normalize(
-            mean=0, std=255
-        ),  # Images transformed to [0, 1] range.
-    ]
+    image_pipeline = (
+        [SimpleRGBImageDecoder()]
+        + (
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomTranslate(padding=2),
+            ]
+            if augment
+            else []
+        )
+        + [
+            transforms.ToTensor(),
+            transforms.ToDevice(device),
+            transforms.ToTorchImage(channels_last=True),
+            transforms.Convert(torch.float16),
+            torchvision.transforms.Normalize(
+                mean=0, std=255
+            ),  # Images transformed to [0, 1] range.
+        ]
+    )
 
     loader = Loader(
         os.path.join(CIFAR_ROOT, f"{split}.beton"),
