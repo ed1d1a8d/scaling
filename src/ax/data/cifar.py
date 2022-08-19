@@ -5,7 +5,7 @@ import ffcv.transforms as transforms
 import torch
 import torchvision
 from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder
-from ffcv.loader import Loader
+from ffcv.loader import Loader, OrderOption
 
 CIFAR_ROOT = "/home/gridsan/groups/ccg/data/scaling/cifar5m"
 
