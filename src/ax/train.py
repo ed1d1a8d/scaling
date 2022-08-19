@@ -617,7 +617,9 @@ def run_experiment(cfg: ExperimentConfig):
     attack_train = FastPGD(
         model=net,
         eps=cfg.adv_eps_train,
-        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3,
+        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3
+        if cfg.pgd_steps > 0
+        else 0,
         steps=cfg.pgd_steps,
         random_start=True,
         loss=attack_loss,
@@ -626,7 +628,9 @@ def run_experiment(cfg: ExperimentConfig):
     attack_val = FastPGD(
         model=net,
         eps=cfg.adv_eps_eval,
-        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3,
+        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3
+        if cfg.pgd_steps > 0
+        else 0,
         steps=cfg.pgd_steps,
         random_start=True,
         loss=attack_loss,
