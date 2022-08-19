@@ -26,8 +26,8 @@ ID_TO_CKPT = {
 
 @dataclasses.dataclass
 class Config:
-    row_start: int = 0
-    row_end: int = 0  # Non-inclusive
+    row_mod: int = 0
+    num_jobs: int = 0
     seed: int = 42
 
 
@@ -49,6 +49,10 @@ def update_run(row: _ExperimentRow):
     assert os.path.exists(ckpt_file)
 
     run: wandb.apis.public.Run = API.run(row.run_path)
+    if run.config.get("retro_use_autoattack", False):
+        print(f"Skipping {row.id} because already re-evaluated.")
+        return
+
     torch.cuda.empty_cache()
 
     dataset_t = DatasetT[row.dataset.split(".")[-1]]
@@ -63,17 +67,21 @@ def update_run(row: _ExperimentRow):
         eval_batch_size=512,  # To avoid OOM with AutoAttack,
     )
 
-    net: nn.Module = cfg.get_net().cuda()
-    net = net.to(memory_format=torch.channels_last)  # type: ignore
-    net.load_state_dict(torch.load(ckpt_file))
-    net.eval()
+    try:
+        net: nn.Module = cfg.get_net().cuda()
+        net = net.to(memory_format=torch.channels_last)  # type: ignore
+        net.load_state_dict(torch.load(ckpt_file))
+        net.eval()
+    except RuntimeError:
+        print(f"Failed to load weights for {row.id}. Corrupted file!")
+        return
 
     attack_test = FastAutoAttack(net, eps=cfg.adv_eps_eval, seed=cfg.seed)
 
     test_loaders = cfg.get_test_loaders()
     for split_name, loader in test_loaders.items():
         print(f"Starting evaluation of {split_name} split...")
-        test_dict, test_imgs = evaluate(net, loader, attack_test, cfg)
+        test_dict, test_imgs = evaluate(net, loader, attack_test, cfg, None)
 
         test_metrics = {
             k: v.data
@@ -121,10 +129,12 @@ def main():
                         "$in": ["DatasetT.CIFAR10", "DatasetT.CIFAR5m", None]
                     }
                 },
+                {"created_at": {"$lt": "2022-08-11T22:12:09.504Z"}},
             ]
         },
         # filters={"tags": {"$in": ["test"]}},
     )
+    print("Total runs:", len(runs))
 
     # Parse runs into dataframe
     df = runs_to_df(runs).sort_values("id").reset_index(drop=True)
@@ -133,7 +143,7 @@ def main():
     df.loc[df.adv_eps_eval.isna(), "adv_eps_eval"] = 8 / 255
 
     all_rows: list[_ExperimentRow] = list(df.itertuples())
-    assigned_rows = all_rows[cfg.row_start : cfg.row_end]
+    assigned_rows = all_rows[cfg.row_mod :: cfg.num_jobs]
 
     # Update assigned runs
     print("Assigned runs:", [row.id for row in assigned_rows])
