@@ -67,6 +67,7 @@ class ExperimentConfig:
     data_augmentation: bool = False
 
     teacher_ckpt_path: Optional[str] = None
+    teacher_use_softmax: bool = False
 
     # model params
     model: ModelT = ModelT.WideResNet
@@ -396,17 +397,20 @@ def evaluate(
 
             imgs_adv: torch.Tensor = attack(imgs_nat, orig_labs)
 
-            with torch.no_grad():
-                labs_nat = (
-                    orig_labs
-                    if teacher_net is None
-                    else teacher_net(imgs_nat).argmax(dim=-1)
-                )
-                labs_adv = (
-                    orig_labs
-                    if teacher_net is None
-                    else teacher_net(imgs_adv).argmax(dim=-1)
-                )
+            labs_nat = labs_adv = orig_labs
+            targets_nat = targets_adv = orig_labs
+            if teacher_net is not None:
+                with torch.autocast("cuda"):  # type: ignore
+                    with torch.no_grad():
+                        teacher_logits_nat = teacher_net(imgs_nat)
+                        teacher_logits_adv = teacher_net(imgs_adv)
+
+                labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
+                labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
+
+                if cfg.teacher_use_softmax:
+                    targets_nat = teacher_logits_nat.softmax(dim=-1)
+                    targets_adv = teacher_logits_adv.softmax(dim=-1)
 
             with torch.autocast("cuda"):  # type: ignore
                 with torch.no_grad():
@@ -414,10 +418,10 @@ def evaluate(
                     logits_adv = net(imgs_adv)
 
                     loss_nat = F.cross_entropy(
-                        logits_nat, labs_nat, reduction="sum"
+                        logits_nat, targets_nat, reduction="sum"
                     )
                     loss_adv = F.cross_entropy(
-                        logits_adv, labs_adv, reduction="sum"
+                        logits_adv, targets_adv, reduction="sum"
                     )
 
             preds_nat = logits_nat.argmax(dim=-1)
@@ -504,33 +508,36 @@ def train(
 
                 imgs_adv: torch.Tensor = attack_train(imgs_nat, orig_labs)
 
-                with torch.no_grad():
-                    labs_nat = (
-                        orig_labs
-                        if teacher_net is None
-                        else teacher_net(imgs_nat).argmax(dim=-1)
-                    )
-                    labs_adv = (
-                        orig_labs
-                        if teacher_net is None
-                        else teacher_net(imgs_adv).argmax(dim=-1)
-                    )
+                labs_nat = labs_adv = orig_labs
+                targets_nat = targets_adv = orig_labs
+                if teacher_net is not None:
+                    with torch.autocast("cuda"):  # type: ignore
+                        with torch.no_grad():
+                            teacher_logits_nat = teacher_net(imgs_nat)
+                            teacher_logits_adv = teacher_net(imgs_adv)
+
+                    labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
+                    labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
+
+                    if cfg.teacher_use_softmax:
+                        targets_nat = teacher_logits_nat.softmax(dim=-1)
+                        targets_adv = teacher_logits_adv.softmax(dim=-1)
 
                 with torch.autocast("cuda"):  # type: ignore
                     if cfg.do_adv_training:
                         logits_adv = net(imgs_adv)
-                        loss_adv = F.cross_entropy(logits_adv, labs_adv)
+                        loss_adv = F.cross_entropy(logits_adv, targets_adv)
                         loss = loss_adv
                         with torch.no_grad():
                             logits_nat = net(imgs_nat)
-                            loss_nat = F.cross_entropy(logits_nat, labs_nat)
+                            loss_nat = F.cross_entropy(logits_nat, targets_nat)
                     else:
                         logits_nat = net(imgs_nat)
-                        loss_nat = F.cross_entropy(logits_nat, labs_nat)
+                        loss_nat = F.cross_entropy(logits_nat, targets_nat)
                         loss = loss_nat
                         with torch.no_grad():
                             logits_adv = net(imgs_adv)
-                            loss_adv = F.cross_entropy(logits_adv, labs_adv)
+                            loss_adv = F.cross_entropy(logits_adv, targets_adv)
 
                 preds_nat = logits_nat.argmax(dim=-1)
                 preds_adv = logits_adv.argmax(dim=-1)
@@ -611,7 +618,11 @@ def run_experiment(cfg: ExperimentConfig):
         teacher_net.eval()  # type: ignore
 
     attack_loss = (
-        None if teacher_net is None else TeacherCrossEntropy(teacher_net)
+        None
+        if teacher_net is None
+        else TeacherCrossEntropy(
+            teacher_net, use_softmax=cfg.teacher_use_softmax
+        )
     )
 
     attack_train = FastPGD(
@@ -643,7 +654,13 @@ def run_experiment(cfg: ExperimentConfig):
     )
 
     try:
-        train(net, attack_train, attack_val, cfg, teacher_net)
+        train(
+            net=net,
+            attack_train=attack_train,
+            attack_val=attack_val,
+            cfg=cfg,
+            teacher_net=teacher_net,
+        )
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
@@ -654,7 +671,11 @@ def run_experiment(cfg: ExperimentConfig):
     for split_name, loader in test_loaders.items():
         print(f"Starting evaluation of {split_name} split...")
         test_dict, test_imgs = evaluate(
-            net, loader, attack_test, cfg, teacher_net
+            net=net,
+            loader=loader,
+            attack=attack_test,
+            cfg=cfg,
+            teacher_net=teacher_net,
         )
 
         wandb_log({f"{split_name}_imgs": Metric(test_imgs)})
