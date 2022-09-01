@@ -35,6 +35,9 @@ torchtyping
 simple-parsing
 dacite
 
+# ThunderSVM
+/home/gridsan/groups/ccg/programs/thundersvm/python; sys_platform != 'darwin'
+
 # Other computational libraries
 matplotlib
 pandas
