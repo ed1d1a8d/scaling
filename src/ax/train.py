@@ -66,6 +66,7 @@ class ExperimentConfig:
     )
     data_augmentation: bool = False
 
+    use_teacher: bool = False
     teacher_ckpt_path: Optional[str] = None
     teacher_use_softmax: bool = False
 
@@ -110,9 +111,7 @@ class ExperimentConfig:
         assert self.min_lr < self.lr
 
         # We currently don't support running student teacher with autoattack.
-        assert not (
-            self.use_autoattack and (self.teacher_ckpt_path is not None)
-        )
+        assert not (self.use_autoattack and self.use_teacher)
 
     @property
     def steps_per_eval(self):
@@ -611,10 +610,11 @@ def run_experiment(cfg: ExperimentConfig):
     net = net.to(memory_format=torch.channels_last)  # type: ignore
 
     teacher_net: Optional[nn.Module] = None
-    if cfg.teacher_ckpt_path is not None:
+    if cfg.use_teacher:
         teacher_net = cfg.get_net().cuda()
         teacher_net = teacher_net.to(memory_format=torch.channels_last)  # type: ignore
-        teacher_net.load_state_dict(torch.load(cfg.teacher_ckpt_path))  # type: ignore
+        if cfg.teacher_ckpt_path is not None:
+            teacher_net.load_state_dict(torch.load(cfg.teacher_ckpt_path))  # type: ignore
         teacher_net.eval()  # type: ignore
 
     attack_loss = (
