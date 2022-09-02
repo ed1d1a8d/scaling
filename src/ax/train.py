@@ -337,23 +337,106 @@ def load_model(model: nn.Module):
     print("Loaded model checkpoint.")
 
 
-def get_imgs_to_log(
+@dataclasses.dataclass
+class BatchOutput:
+    size: int
+
+    imgs_nat: torch.Tensor
+    imgs_adv: torch.Tensor
+
+    labs_nat: torch.Tensor
+    labs_adv: torch.Tensor
+
+    preds_nat: torch.Tensor
+    preds_adv: torch.Tensor
+
+    loss: torch.Tensor
+    loss_nat: float
+    loss_adv: float
+
+    acc_nat: float
+    acc_adv: float
+    acc: float
+
+
+def process_batch(
     imgs_nat: torch.Tensor,
-    imgs_adv: torch.Tensor,
-    preds_nat: torch.Tensor,
-    preds_adv: torch.Tensor,
-    labs_nat: torch.Tensor,
-    labs_adv: torch.Tensor,
+    orig_labs: torch.Tensor,
+    net: nn.Module,
+    teacher_net: Optional[nn.Module],
+    attack: Union[FastPGD, FastAutoAttack],
+    cfg: ExperimentConfig,
+):
+    imgs_nat = imgs_nat.cuda()
+    orig_labs = orig_labs.cuda()
+
+    imgs_adv: torch.Tensor = attack(imgs_nat, orig_labs)
+
+    labs_nat = labs_adv = orig_labs
+    targets_nat = targets_adv = orig_labs
+    if teacher_net is not None:
+        with torch.autocast("cuda"):  # type: ignore
+            with torch.no_grad():
+                teacher_logits_nat = teacher_net(imgs_nat)
+                teacher_logits_adv = teacher_net(imgs_adv)
+
+        labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
+        labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
+
+        if cfg.teacher_use_softmax:
+            targets_nat = teacher_logits_nat.softmax(dim=-1)
+            targets_adv = teacher_logits_adv.softmax(dim=-1)
+
+    with torch.autocast("cuda"):  # type: ignore
+        if cfg.do_adv_training:
+            logits_adv = net(imgs_adv)
+            loss_adv = F.cross_entropy(logits_adv, targets_adv)
+            loss = loss_adv
+            with torch.no_grad():
+                logits_nat = net(imgs_nat)
+                loss_nat = F.cross_entropy(logits_nat, targets_nat)
+        else:
+            logits_nat = net(imgs_nat)
+            loss_nat = F.cross_entropy(logits_nat, targets_nat)
+            loss = loss_nat
+            with torch.no_grad():
+                logits_adv = net(imgs_adv)
+                loss_adv = F.cross_entropy(logits_adv, targets_adv)
+
+    preds_nat = logits_nat.argmax(dim=-1)
+    preds_adv = logits_adv.argmax(dim=-1)
+    acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
+    acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
+
+    return BatchOutput(
+        size=imgs_nat.shape[0],
+        imgs_nat=imgs_nat,
+        imgs_adv=imgs_adv,
+        preds_nat=preds_nat,
+        preds_adv=preds_adv,
+        labs_nat=labs_nat,
+        labs_adv=labs_adv,
+        loss=loss,
+        loss_nat=loss_nat.item(),
+        loss_adv=loss_adv.item(),
+        acc_nat=acc_nat,
+        acc_adv=acc_adv,
+        acc=acc_adv if cfg.do_adv_training else acc_nat,
+    )
+
+
+def get_imgs_to_log(
+    bo: BatchOutput,
     cfg: ExperimentConfig,
     adv_eps: float,
 ) -> list[wandb.Image]:
-    imgs_diff = (imgs_adv - imgs_nat) / adv_eps / (2 + 1e-9) + 0.5
+    imgs_diff = (bo.imgs_adv - bo.imgs_nat) / adv_eps / (2 + 1e-9) + 0.5
 
     def get_caption(i: int) -> str:
-        lab_nat = cifar.cls_name(int(labs_nat[i].item()))
-        lab_adv = cifar.cls_name(int(labs_adv[i].item()))
-        pred_nat = cifar.cls_name(int(preds_nat[i].item()))
-        pred_adv = cifar.cls_name(int(preds_adv[i].item()))
+        lab_nat = cifar.cls_name(int(bo.labs_nat[i].item()))
+        lab_adv = cifar.cls_name(int(bo.labs_adv[i].item()))
+        pred_nat = cifar.cls_name(int(bo.preds_nat[i].item()))
+        pred_adv = cifar.cls_name(int(bo.preds_adv[i].item()))
         return "\n".join(
             [
                 f"preds: {pred_nat}, {pred_adv}; true: ({lab_nat}, {lab_adv})",
@@ -364,11 +447,11 @@ def get_imgs_to_log(
     return [
         wandb.Image(
             torchvision.utils.make_grid(
-                [imgs_nat[i], imgs_adv[i], imgs_diff[i]], nrow=3, ncol=1
+                [bo.imgs_nat[i], bo.imgs_adv[i], imgs_diff[i]], nrow=3, ncol=1
             ),
             caption=get_caption(i),
         )
-        for i in range(min(cfg.n_imgs_to_log_per_eval, len(imgs_nat)))
+        for i in range(min(cfg.n_imgs_to_log_per_eval, len(bo.imgs_nat)))
     ]
 
 
@@ -394,52 +477,24 @@ def evaluate(
             imgs_nat = imgs_nat.cuda()
             orig_labs = orig_labs.cuda()
 
-            imgs_adv: torch.Tensor = attack(imgs_nat, orig_labs)
+            bo = process_batch(
+                imgs_nat=imgs_nat,
+                orig_labs=orig_labs,
+                net=net,
+                teacher_net=teacher_net,
+                attack=attack,
+                cfg=cfg,
+            )
 
-            labs_nat = labs_adv = orig_labs
-            targets_nat = targets_adv = orig_labs
-            if teacher_net is not None:
-                with torch.autocast("cuda"):  # type: ignore
-                    with torch.no_grad():
-                        teacher_logits_nat = teacher_net(imgs_nat)
-                        teacher_logits_adv = teacher_net(imgs_adv)
+            n_correct_nat += bo.acc_nat * bo.size
+            n_correct_adv += bo.acc_adv * bo.size
 
-                labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
-                labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
-
-                if cfg.teacher_use_softmax:
-                    targets_nat = teacher_logits_nat.softmax(dim=-1)
-                    targets_adv = teacher_logits_adv.softmax(dim=-1)
-
-            with torch.autocast("cuda"):  # type: ignore
-                with torch.no_grad():
-                    logits_nat = net(imgs_nat)
-                    logits_adv = net(imgs_adv)
-
-                    loss_nat = F.cross_entropy(
-                        logits_nat, targets_nat, reduction="sum"
-                    )
-                    loss_adv = F.cross_entropy(
-                        logits_adv, targets_adv, reduction="sum"
-                    )
-
-            preds_nat = logits_nat.argmax(dim=-1)
-            preds_adv = logits_adv.argmax(dim=-1)
-
-            n_correct_nat += preds_nat.eq(labs_nat).sum().item()
-            n_correct_adv += preds_adv.eq(labs_adv).sum().item()
-
-            tot_loss_nat += loss_nat.item()
-            tot_loss_adv += loss_adv.item()
+            tot_loss_nat += bo.loss_nat * bo.size
+            tot_loss_adv += bo.loss_adv * bo.size
 
             if len(imgs_to_log) == 0:
                 imgs_to_log = get_imgs_to_log(
-                    imgs_nat=imgs_nat,
-                    imgs_adv=imgs_adv,
-                    preds_nat=preds_nat,
-                    preds_adv=preds_adv,
-                    labs_nat=labs_nat,
-                    labs_adv=labs_adv,
+                    bo=bo,
                     cfg=cfg,
                     adv_eps=attack.eps,
                 )
@@ -495,9 +550,6 @@ def train(
             imgs_nat: torch.Tensor
             orig_labs: torch.Tensor
             for (imgs_nat, orig_labs) in loader_train:
-                imgs_nat = imgs_nat.cuda()
-                orig_labs = orig_labs.cuda()
-
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
                     print(
@@ -505,54 +557,24 @@ def train(
                     )
                     return
 
-                imgs_adv: torch.Tensor = attack_train(imgs_nat, orig_labs)
-
-                labs_nat = labs_adv = orig_labs
-                targets_nat = targets_adv = orig_labs
-                if teacher_net is not None:
-                    with torch.autocast("cuda"):  # type: ignore
-                        with torch.no_grad():
-                            teacher_logits_nat = teacher_net(imgs_nat)
-                            teacher_logits_adv = teacher_net(imgs_adv)
-
-                    labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
-                    labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
-
-                    if cfg.teacher_use_softmax:
-                        targets_nat = teacher_logits_nat.softmax(dim=-1)
-                        targets_adv = teacher_logits_adv.softmax(dim=-1)
-
-                with torch.autocast("cuda"):  # type: ignore
-                    if cfg.do_adv_training:
-                        logits_adv = net(imgs_adv)
-                        loss_adv = F.cross_entropy(logits_adv, targets_adv)
-                        loss = loss_adv
-                        with torch.no_grad():
-                            logits_nat = net(imgs_nat)
-                            loss_nat = F.cross_entropy(logits_nat, targets_nat)
-                    else:
-                        logits_nat = net(imgs_nat)
-                        loss_nat = F.cross_entropy(logits_nat, targets_nat)
-                        loss = loss_nat
-                        with torch.no_grad():
-                            logits_adv = net(imgs_adv)
-                            loss_adv = F.cross_entropy(logits_adv, targets_adv)
-
-                preds_nat = logits_nat.argmax(dim=-1)
-                preds_adv = logits_adv.argmax(dim=-1)
-                acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
-                acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
-                acc = acc_adv if cfg.do_adv_training else acc_nat
+                bo = process_batch(
+                    imgs_nat=imgs_nat,
+                    orig_labs=orig_labs,
+                    net=net,
+                    teacher_net=teacher_net,
+                    attack=attack_train,
+                    cfg=cfg,
+                )
 
                 optimizer.zero_grad()
-                scaler.scale(loss).backward()  # type: ignore
+                scaler.scale(bo.loss).backward()  # type: ignore
                 scaler.step(optimizer)
                 scaler.update()
 
                 n_steps += 1
                 pbar.update(1)
                 pbar.set_description(
-                    f"epochs={n_epochs}; loss={loss.item():6e}; acc={acc:.4f}; lr={cur_lr:6e}"
+                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; acc={bo.acc:.4f}; lr={cur_lr:6e}"
                 )
 
                 log_dict: dict[str, Metric] = dict()
@@ -574,14 +596,7 @@ def train(
                     log_dict["val_imgs"] = Metric(val_imgs)
                     log_dict["train_imgs"] = Metric(
                         get_imgs_to_log(
-                            imgs_nat=imgs_nat,
-                            imgs_adv=imgs_adv,
-                            preds_nat=preds_nat,
-                            preds_adv=preds_adv,
-                            labs_nat=labs_nat,
-                            labs_adv=labs_adv,
-                            cfg=cfg,
-                            adv_eps=cfg.adv_eps_train,
+                            bo=bo, cfg=cfg, adv_eps=cfg.adv_eps_train
                         )
                     )
 
@@ -590,12 +605,12 @@ def train(
                         step=Metric(n_steps),
                         epoch=Metric(n_epochs),
                         lr=Metric(cur_lr),
-                        train_loss=Metric(loss.item(), "min"),
-                        train_acc=Metric(acc, "max"),
-                        train_loss_nat=Metric(loss_nat.item(), "min"),
-                        train_loss_adv=Metric(loss_adv.item(), "min"),
-                        train_acc_nat=Metric(acc_nat, "max"),
-                        train_acc_adv=Metric(acc_adv, "max"),
+                        train_loss=Metric(bo.loss.item(), "min"),
+                        train_acc=Metric(bo.acc, "max"),
+                        train_loss_nat=Metric(bo.loss_nat, "min"),
+                        train_loss_adv=Metric(bo.loss_adv, "min"),
+                        train_acc_nat=Metric(bo.acc_nat, "max"),
+                        train_acc_adv=Metric(bo.acc_adv, "max"),
                     )
                     | log_dict
                 )
