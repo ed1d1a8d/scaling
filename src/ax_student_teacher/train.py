@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 import enum
 import os
@@ -283,6 +284,7 @@ def process_batch(
     teacher_net: nn.Module,
     attack: FastPGD,
     cfg: ExperimentConfig,
+    eval_mode: bool = False,
 ):
     xs_nat_raw = xs_nat_raw.cuda()
 
@@ -301,21 +303,22 @@ def process_batch(
         targets_nat = teacher_logits_nat.softmax(dim=-1)
         targets_adv = teacher_logits_adv.softmax(dim=-1)
 
-    with torch.autocast("cuda"):  # type: ignore
-        if cfg.do_adv_training:
-            logits_adv = net(xs_adv)
-            loss_adv = F.cross_entropy(logits_adv, targets_adv)
-            loss = loss_adv
-            with torch.no_grad():
-                logits_nat = net(xs_nat)
-                loss_nat = F.cross_entropy(logits_nat, targets_nat)
-        else:
-            logits_nat = net(xs_nat)
-            loss_nat = F.cross_entropy(logits_nat, targets_nat)
-            loss = loss_nat
-            with torch.no_grad():
+    with torch.no_grad() if eval_mode else contextlib.nullcontext():
+        with torch.autocast("cuda"):  # type: ignore
+            if cfg.do_adv_training:
                 logits_adv = net(xs_adv)
                 loss_adv = F.cross_entropy(logits_adv, targets_adv)
+                loss = loss_adv
+                with torch.no_grad():
+                    logits_nat = net(xs_nat)
+                    loss_nat = F.cross_entropy(logits_nat, targets_nat)
+            else:
+                logits_nat = net(xs_nat)
+                loss_nat = F.cross_entropy(logits_nat, targets_nat)
+                loss = loss_nat
+                with torch.no_grad():
+                    logits_adv = net(xs_adv)
+                    loss_adv = F.cross_entropy(logits_adv, targets_adv)
 
     preds_nat = logits_nat.argmax(dim=-1)
     preds_adv = logits_adv.argmax(dim=-1)
@@ -356,6 +359,7 @@ def evaluate(
                 teacher_net=teacher_net,
                 attack=attack,
                 cfg=cfg,
+                eval_mode=True,
             )
 
             n_correct_nat += bo.acc_nat * bo.size
