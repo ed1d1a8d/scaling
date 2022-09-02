@@ -17,7 +17,7 @@ for n_train in "${n_trains[@]}"; do
         --n_train $n_train \
         --do_adv_training $adv_train \
         --teacher_use_softmax $use_softmax \
-        --tags student-teacher-random-init
+        --tags student-teacher-random-init-v2
     done
   done
 done
