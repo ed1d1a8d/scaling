@@ -152,7 +152,7 @@ class ExperimentConfig:
 
         # Set bias to zero so teacher is not a trivial function
         last_lyr: nn.Linear = teacher_net.net[-1]  # type: ignore
-        last_lyr.bias.data.fill_(0)
+        last_lyr.bias.data.zero_()
 
         return teacher_net
 

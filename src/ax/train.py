@@ -69,6 +69,9 @@ class ExperimentConfig:
     use_teacher: bool = False
     teacher_ckpt_path: Optional[str] = None
     teacher_use_softmax: bool = False
+    zero_teacher_readout_bias: bool = (
+        True  # Only used if teacher_ckpt_path == None
+    )
 
     # model params
     model: ModelT = ModelT.WideResNet
@@ -630,6 +633,11 @@ def run_experiment(cfg: ExperimentConfig):
         teacher_net = teacher_net.to(memory_format=torch.channels_last)  # type: ignore
         if cfg.teacher_ckpt_path is not None:
             teacher_net.load_state_dict(torch.load(cfg.teacher_ckpt_path))  # type: ignore
+        elif cfg.zero_teacher_readout_bias:
+            if isinstance(teacher_net, wrn.WideResNet):
+                teacher_net.readout.bias.data.zero_()
+            else:
+                raise ValueError(teacher_net)
         teacher_net.eval()  # type: ignore
 
     attack_loss = (
