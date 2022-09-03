@@ -4,10 +4,16 @@ from torch import nn
 
 
 class TeacherCrossEntropy:
-    def __init__(self, teacher: nn.Module, use_softmax: bool):
+    def __init__(
+        self,
+        teacher: nn.Module,
+        use_softmax: bool,
+        symmetrize: bool = False,
+    ):
         """Teacher should return logits."""
         self.teacher = teacher
         self.use_softmax = use_softmax
+        self.symmetrize = symmetrize
 
     def get_loss(self, inputs: torch.Tensor, student_logits: torch.Tensor):
         teacher_logits: torch.Tensor = self.teacher(inputs)
@@ -18,4 +24,14 @@ class TeacherCrossEntropy:
             else teacher_logits.argmax(dim=-1)
         )
 
-        return F.cross_entropy(input=student_logits, target=teacher_targets)
+        student_targets = (
+            student_logits.softmax(dim=-1)
+            if self.use_softmax
+            else student_logits.argmax(dim=-1)
+        )
+
+        return F.cross_entropy(input=student_logits, target=teacher_targets) + (
+            F.cross_entropy(input=teacher_logits, target=student_targets)
+            if self.symmetrize
+            else 0
+        )
