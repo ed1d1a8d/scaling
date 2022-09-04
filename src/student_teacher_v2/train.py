@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 import enum
 from typing import TypeVar
@@ -25,6 +26,7 @@ class ActivationT(enum.Enum):
     ReLU = nn.ReLU
     LeakyReLU = nn.LeakyReLU
     SiLU = nn.SiLU
+    Identity = nn.Identity
 
 
 class OptimizerT(enum.Enum):
@@ -75,6 +77,7 @@ class ExperimentConfig:
     viz_side_samples: int = 256
 
     # Other params
+    half_precision: bool = False
     global_seed: int = 42
     num_workers: int = 20
     tags: tuple[str, ...] = ("test",)
@@ -101,6 +104,13 @@ class ExperimentConfig:
                 for w in self.teacher_widths[:-1]
             ]
             + [1]
+        )
+
+    def precision_context(self, net: nn.Module):
+        return (
+            torch.autocast(net.device.type)  # type: ignore
+            if self.half_precision
+            else contextlib.nullcontext()
         )
 
     def _get_loader(
@@ -189,14 +199,15 @@ def get_imgs_to_log(
     cfg: ExperimentConfig,
 ) -> list[wandb.Image]:
     def get_render(net: FCNet, d1: int, d2: int) -> torch.Tensor:
-        raw_render = net.render_2d_slice(
-            d1=d1,
-            d2=d2,
-            side_samples=cfg.viz_side_samples,
-            batch_size=cfg.eval_batch_size,
-            lo=cfg.input_lo,
-            hi=cfg.input_hi,
-        )
+        with cfg.precision_context(net):
+            raw_render = net.render_2d_slice(
+                d1=d1,
+                d2=d2,
+                side_samples=cfg.viz_side_samples,
+                batch_size=cfg.eval_batch_size,
+                lo=cfg.input_lo,
+                hi=cfg.input_hi,
+            )
         return torch.tensor(raw_render[np.newaxis, :, :]).float()
 
     imgs: list[wandb.Image] = []
@@ -250,10 +261,10 @@ def process_batch(
     cfg: ExperimentConfig,
 ):
     xs = xs.cuda()
-    with torch.autocast("cuda"):  # type: ignore
+    with cfg.precision_context(net):
         preds = net(xs)
 
-    with torch.autocast("cuda"):  # type: ignore
+    with cfg.precision_context(net):
         with torch.no_grad():
             teacher_preds = teacher_net(xs)
 
