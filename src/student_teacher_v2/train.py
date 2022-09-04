@@ -42,10 +42,12 @@ class ExperimentConfig:
     input_hi: float = 1.0
 
     # Network params
-    activation: ActivationT = ActivationT.ReLU
     teacher_widths: tuple[int, ...] = (2, 1)
-    student_width_scale_factor: float = 1.0
+    activation: ActivationT = ActivationT.ReLU
+    end_with_activation: bool = False
     teacher_seed: int = 101
+
+    student_width_scale_factor: float = 1.0
     student_seed: int = 103
 
     # Optimizer params
@@ -158,6 +160,7 @@ class ExperimentConfig:
             input_dim=self.input_dim,
             layer_widths=self.student_widths,
             activation=self.activation.value,
+            end_with_activation=self.end_with_activation,
         )
 
     def get_teacher(self) -> FCNet:
@@ -166,11 +169,8 @@ class ExperimentConfig:
             input_dim=self.input_dim,
             layer_widths=self.teacher_widths,
             activation=self.activation.value,
+            end_with_activation=self.end_with_activation,
         )
-
-        # Set bias to zero so teacher is not a trivial function
-        # last_lyr: nn.Linear = teacher_net.net[-1]  # type: ignore
-        # last_lyr.bias.data.zero_()
 
         return teacher_net
 

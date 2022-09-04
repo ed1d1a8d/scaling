@@ -3,9 +3,8 @@ from typing import Callable, Type
 import mup
 import numpy as np
 import torch
-from torch import nn
-
 from src.student_teacher_v2 import utils
+from torch import nn
 
 
 class FCNet(nn.Module):
@@ -16,6 +15,8 @@ class FCNet(nn.Module):
         input_dim: int,
         layer_widths: tuple[int, ...],
         activation: Type[nn.Module] = nn.ReLU,
+        end_with_activation: bool = False,
+        zero_final_bias: bool = False,
     ):
         super().__init__()
         self.input_dim = input_dim
@@ -31,6 +32,13 @@ class FCNet(nn.Module):
                 _layers.append(nn.Linear(w_in, w_out))
             _layers.append(activation())
             _layers.append(mup.MuReadout(layer_widths[-2], layer_widths[-1]))
+
+        if zero_final_bias:
+            readout: mup.MuReadout = _layers[-1]  # type: ignore
+            readout.bias.data.zero_()
+
+        if end_with_activation:
+            _layers.append(activation())
 
         self.net = nn.Sequential(*_layers)
         mup.set_base_shapes(self.net, None)
