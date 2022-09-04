@@ -15,6 +15,7 @@ import torch.utils.data
 import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
+from src.ax.attack import AllPairsPGD
 from src.ax.attack.FastAutoAttack import FastAutoAttack
 from src.ax.attack.FastPGD import FastPGD
 from src.ax.attack.teacher_loss import TeacherCrossEntropy
@@ -24,6 +25,7 @@ from torch import nn
 from tqdm.auto import tqdm
 
 T = TypeVar("T")
+AttackT = Union[AllPairsPGD.AllPairsPGD, FastPGD, FastAutoAttack]
 
 
 def ceil_div(a: int, b: int) -> int:
@@ -56,6 +58,11 @@ class OptimizerT(enum.Enum):
     AdamW = enum.auto()
 
 
+class StudentTeacherAttack(enum.Enum):
+    PGD = enum.auto()
+    AllPairsPGD = enum.auto()
+
+
 @dataclasses.dataclass
 class ExperimentConfig:
     # dataset params
@@ -69,10 +76,14 @@ class ExperimentConfig:
 
     use_teacher: bool = False
     teacher_ckpt_path: Optional[str] = None
-    teacher_use_softmax: bool = False
     zero_teacher_readout_bias: bool = (
         True  # Only used if teacher_ckpt_path == None
     )
+
+    student_teacher_attack: StudentTeacherAttack = (
+        StudentTeacherAttack.AllPairsPGD
+    )
+    student_teacher_use_softmax: bool = False
 
     # model params
     model: ModelT = ModelT.WideResNet
@@ -103,6 +114,9 @@ class ExperimentConfig:
     pgd_steps: int = 10
     use_autoattack: bool = False
 
+    # Testing params
+    n_test: Optional[int] = None  # Used for speed up testing
+
     # Other params
     seed: int = 42
     num_workers: int = 20
@@ -116,6 +130,8 @@ class ExperimentConfig:
 
         # We currently don't support running student teacher with autoattack.
         assert not (self.use_autoattack and self.use_teacher)
+
+        assert self.pgd_steps > 0
 
     @property
     def steps_per_eval(self):
@@ -223,13 +239,19 @@ class ExperimentConfig:
         if self.dataset is DatasetT.CIFAR5m:
             return {
                 "test_orig": cifar.get_loader(
-                    split="test-orig", batch_size=self.eval_batch_size
+                    split="test-orig",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
                 ),
                 "train_orig": cifar.get_loader(
-                    split="train-orig", batch_size=self.eval_batch_size
+                    split="train-orig",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
                 ),
                 "test": cifar.get_loader(
-                    split="test", batch_size=self.eval_batch_size
+                    split="test",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
                 ),
             }
 
@@ -238,10 +260,14 @@ class ExperimentConfig:
                 "test_orig": cifar.get_loader(
                     split="test-orig",
                     batch_size=self.eval_batch_size,
-                    indices=range(5_000, 10_000),
+                    indices=range(5_000, 10_000)
+                    if self.n_test is None
+                    else range(5_000, 5_000 + self.n_test),
                 ),
                 "test_5m": cifar.get_loader(
-                    split="test", batch_size=self.eval_batch_size
+                    split="test",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
                 ),
             }
 
@@ -250,7 +276,12 @@ class ExperimentConfig:
             DatasetT.HVStripe,
             DatasetT.SquareCircle,
         ):
-            return {"test": self.get_synthetic_loader(split="test", size=5_000)}
+            return {
+                "test": self.get_synthetic_loader(
+                    split="test",
+                    size=5_000 if self.n_test is None else self.n_test,
+                )
+            }
 
         raise ValueError(self.dataset)
 
@@ -297,6 +328,76 @@ class ExperimentConfig:
             )
 
         raise ValueError(self.optimizer)
+
+    def get_attacks(self, net: nn.Module, teacher_net: Optional[nn.Module]):
+        attack_train = FastPGD(
+            model=net,
+            eps=self.adv_eps_train,
+            alpha=self.adv_eps_train / self.pgd_steps * 2.3,
+            steps=self.pgd_steps,
+            random_start=True,
+        )
+
+        attack_val = FastPGD(
+            model=net,
+            eps=self.adv_eps_eval,
+            alpha=self.adv_eps_eval / self.pgd_steps * 2.3,
+            steps=self.pgd_steps,
+            random_start=True,
+        )
+
+        attack_test = (
+            FastAutoAttack(net, eps=self.adv_eps_eval)
+            if self.use_autoattack
+            else attack_val
+        )
+
+        if not self.use_teacher:
+            assert teacher_net is None
+
+        elif self.student_teacher_attack is StudentTeacherAttack.PGD:
+            assert teacher_net is not None
+            assert isinstance(attack_test, FastPGD)
+
+            st_loss = TeacherCrossEntropy(
+                teacher_net, use_softmax=self.student_teacher_use_softmax
+            )
+            attack_train.loss = attack_val.loss = attack_test.loss = st_loss
+
+        elif self.student_teacher_attack is StudentTeacherAttack.AllPairsPGD:
+            assert teacher_net is not None
+
+            attack_train = AllPairsPGD.AllPairsPGD(
+                net1=net,
+                net2=teacher_net,
+                search_strategy=AllPairsPGD.SearchStrategy.TRAINING,
+                eps=self.adv_eps_train,
+                alpha=self.adv_eps_train / self.pgd_steps * 2.3,
+                steps=self.pgd_steps,
+            )
+
+            attack_val = AllPairsPGD.AllPairsPGD(
+                net1=net,
+                net2=teacher_net,
+                search_strategy=AllPairsPGD.SearchStrategy.TRAINING,
+                eps=self.adv_eps_eval,
+                alpha=self.adv_eps_eval / self.pgd_steps * 2.3,
+                steps=self.pgd_steps,
+            )
+
+            attack_test = AllPairsPGD.AllPairsPGD(
+                net1=net,
+                net2=teacher_net,
+                search_strategy=AllPairsPGD.SearchStrategy.ALL,
+                eps=self.adv_eps_eval,
+                alpha=self.adv_eps_eval / self.pgd_steps * 2.3,
+                steps=self.pgd_steps,
+            )
+
+        else:
+            raise ValueError(self.student_teacher_attack)
+
+        return attack_train, attack_val, attack_test
 
 
 @dataclasses.dataclass
@@ -368,7 +469,7 @@ def process_batch(
     orig_labs: torch.Tensor,
     net: nn.Module,
     teacher_net: Optional[nn.Module],
-    attack: Union[FastPGD, FastAutoAttack],
+    attack: AttackT,
     cfg: ExperimentConfig,
     eval_mode: bool = False,
 ):
@@ -388,7 +489,7 @@ def process_batch(
         labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
         labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
 
-        if cfg.teacher_use_softmax:
+        if cfg.student_teacher_use_softmax:
             targets_nat = teacher_logits_nat.softmax(dim=-1)
             targets_adv = teacher_logits_adv.softmax(dim=-1)
 
@@ -464,7 +565,7 @@ def get_imgs_to_log(
 def evaluate(
     net: nn.Module,
     loader: Union[ffcv.loader.Loader, torch.utils.data.DataLoader],
-    attack: Union[FastPGD, FastAutoAttack],
+    attack: AttackT,
     cfg: ExperimentConfig,
     teacher_net: Optional[nn.Module],
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
@@ -529,8 +630,8 @@ def evaluate(
 
 def train(
     net: nn.Module,
-    attack_train: FastPGD,
-    attack_val: FastPGD,
+    attack_train: AttackT,
+    attack_val: AttackT,
     cfg: ExperimentConfig,
     teacher_net: Optional[nn.Module],
 ):
@@ -644,40 +745,8 @@ def run_experiment(cfg: ExperimentConfig):
                 raise ValueError(teacher_net)
         teacher_net.eval()  # type: ignore
 
-    attack_loss = (
-        None
-        if teacher_net is None
-        else TeacherCrossEntropy(
-            teacher_net, use_softmax=cfg.teacher_use_softmax
-        )
-    )
-
-    attack_train = FastPGD(
-        model=net,
-        eps=cfg.adv_eps_train,
-        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3
-        if cfg.pgd_steps > 0
-        else 0,
-        steps=cfg.pgd_steps,
-        random_start=True,
-        loss=attack_loss,
-    )
-
-    attack_val = FastPGD(
-        model=net,
-        eps=cfg.adv_eps_eval,
-        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3
-        if cfg.pgd_steps > 0
-        else 0,
-        steps=cfg.pgd_steps,
-        random_start=True,
-        loss=attack_loss,
-    )
-
-    attack_test = (
-        FastAutoAttack(net, eps=cfg.adv_eps_eval)
-        if cfg.use_autoattack
-        else attack_val
+    attack_train, attack_val, attack_test = cfg.get_attacks(
+        net=net, teacher_net=teacher_net
     )
 
     try:
