@@ -1,4 +1,3 @@
-import contextlib
 import dataclasses
 import enum
 import os
@@ -14,25 +13,18 @@ import torch.utils.data
 import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
-from src.ax.attack.FastPGD import FastPGD
-from src.ax.attack.teacher_loss import TeacherCrossEntropy
-from src.ax_student_teacher.fc_net import FCNet
+from src.student_teacher_v2 import utils
+from src.student_teacher_v2.fc_net import FCNet
 from torch import nn
 from tqdm.auto import tqdm
 
 T = TypeVar("T")
 
 
-def ceil_div(a: int, b: int) -> int:
-    return (a + b - 1) // b
-
-
-def tag_dict(
-    d: dict[str, T],
-    prefix: str = "",
-    suffix: str = "",
-) -> dict[str, T]:
-    return {f"{prefix}{key}{suffix}": val for key, val in d.items()}
+class ActivationT(enum.Enum):
+    ReLU = nn.ReLU
+    LeakyReLU = nn.LeakyReLU
+    SiLU = nn.SiLU
 
 
 class OptimizerT(enum.Enum):
@@ -42,17 +34,18 @@ class OptimizerT(enum.Enum):
 
 @dataclasses.dataclass
 class ExperimentConfig:
+    # Input params
     input_dim: int = 32
-    data_dim: int = 8
+    input_lo: float = 0.0
+    input_hi: float = 1.0
 
-    # Network config
-    layer_widths: tuple[int, ...] = (96, 192, 2)
+    # Network params
+    layer_widths: tuple[int, ...] = (96, 192, 1)
+    activation: ActivationT = ActivationT.ReLU
     teacher_seed: int = 42
     student_seed: int = 0
 
-    teacher_use_softmax: bool = False
-
-    # optimizer params
+    # Optimizer params
     optimizer: OptimizerT = OptimizerT.AdamW
     momentum: float = 0.9  # only for SGD
     weight_decay: float = 5e-4
@@ -60,7 +53,7 @@ class ExperimentConfig:
     min_lr: float = 1e-6
     lr_decay_patience_evals: int = 5
 
-    # dataset sizes
+    # Dataset params
     n_train: int = 2048  # -1 means infinite data
     n_val: int = 512 * 100
     n_test: int = 512 * 1000
@@ -69,19 +62,16 @@ class ExperimentConfig:
     ds_val_seed: int = -2
     ds_test_seed: int = -3
 
-    # train params
+    # Train params
     batch_size: int = 256
-    do_adv_training: bool = True
 
-    # eval params
+    # Eval params
     eval_batch_size: int = 512
     samples_per_eval: int = 512 * 100  # (51200) aka epoch size
-    viz_side_samples: int = 256
 
-    # attack parameter only for CIFAR-10 and SVHN
-    adv_eps_train: float = 8 / 255
-    adv_eps_eval: float = 8 / 255
-    pgd_steps: int = 10
+    # Vizualization params
+    n_viz_dims: int = 5
+    viz_side_samples: int = 256
 
     # Other params
     global_seed: int = 42
@@ -90,51 +80,55 @@ class ExperimentConfig:
     wandb_dir: str = "/home/gridsan/groups/ccg"
 
     def __post_init__(self):
+        assert self.input_lo <= self.input_hi
+
+        # We only support scalar outputs at the moment
+        assert self.layer_widths[-1] == 1
+
         assert self.n_train > 0 or self.n_train == -1
-        assert self.data_dim < self.input_dim
         assert self.min_lr < self.lr
 
     @property
     def steps_per_eval(self):
-        return ceil_div(self.samples_per_eval, self.batch_size)
+        return utils.ceil_div(self.samples_per_eval, self.batch_size)
 
-    def prepare_batch(self, xs_raw: torch.Tensor) -> torch.Tensor:
-        return F.pad(xs_raw, pad=(0, self.input_dim - self.data_dim), value=0.5)
-
-    def get_loader_train(self):
-        xs = torch.rand(
-            size=(self.n_train, self.data_dim),
-            generator=torch.Generator().manual_seed(self.ds_train_seed),
+    def _get_loader(
+        self, n: int, seed: int, batch_size: int
+    ) -> torch.utils.data.DataLoader:
+        xs = (
+            torch.rand(
+                size=(n, self.input_dim),
+                generator=torch.Generator().manual_seed(seed),
+            )
+            * (self.input_hi - self.input_lo)
+            + self.input_lo
         )
         return torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(xs),
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             shuffle=True,
             num_workers=self.num_workers,
+        )
+
+    def get_loader_train(self):
+        return self._get_loader(
+            n=self.n_train,
+            seed=self.ds_train_seed,
+            batch_size=self.batch_size,
         )
 
     def get_loader_val(self):
-        xs = torch.rand(
-            size=(self.n_val, self.data_dim),
-            generator=torch.Generator().manual_seed(self.ds_val_seed),
-        )
-        return torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(xs),
-            batch_size=self.eval_batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
+        return self._get_loader(
+            n=self.n_val,
+            seed=self.ds_val_seed,
+            batch_size=self.batch_size,
         )
 
     def get_loader_test(self):
-        xs = torch.rand(
-            size=(self.n_test, self.data_dim),
-            generator=torch.Generator().manual_seed(self.ds_test_seed),
-        )
-        return torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(xs),
-            batch_size=self.eval_batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
+        return self._get_loader(
+            n=self.n_test,
+            seed=self.ds_test_seed,
+            batch_size=self.batch_size,
         )
 
     def get_student(self) -> FCNet:
@@ -142,18 +136,20 @@ class ExperimentConfig:
         return FCNet(
             input_dim=self.input_dim,
             layer_widths=self.layer_widths,
+            activation=self.activation.value,
         )
 
     def get_teacher(self) -> FCNet:
-        torch.random.manual_seed(self.student_seed)
+        torch.random.manual_seed(self.teacher_seed)
         teacher_net = FCNet(
             input_dim=self.input_dim,
             layer_widths=self.layer_widths,
+            activation=self.activation.value,
         )
 
         # Set bias to zero so teacher is not a trivial function
-        last_lyr: nn.Linear = teacher_net.net[-1]  # type: ignore
-        last_lyr.bias.data.zero_()
+        # last_lyr: nn.Linear = teacher_net.net[-1]  # type: ignore
+        # last_lyr.bias.data.zero_()
 
         return teacher_net
 
@@ -219,120 +215,79 @@ def load_model(model: nn.Module):
 
 
 def get_imgs_to_log(
-    net: FCNet,
+    student_net: FCNet,
     teacher_net: FCNet,
     cfg: ExperimentConfig,
 ) -> list[wandb.Image]:
-    student_viz_nat = net.viz_2d(
-        side_samples=cfg.viz_side_samples,
-        pad=(0, cfg.input_dim - 2),
-        value=0.5,
-    )[np.newaxis, ...]
-    teacher_viz_nat = teacher_net.viz_2d(
-        side_samples=cfg.viz_side_samples,
-        pad=(0, cfg.input_dim - 2),
-        value=0.5,
-    )[np.newaxis, ...]
+    # Visualization of various 2x2 grids:
+    # Student | Teacher
 
-    student_viz_adv = net.viz_2d(
-        side_samples=cfg.viz_side_samples,
-        pad=(0, cfg.input_dim - 2),
-        value=0.5 + cfg.adv_eps_eval,
-    )[np.newaxis, ...]
-    teacher_viz_adv = teacher_net.viz_2d(
-        side_samples=cfg.viz_side_samples,
-        pad=(0, cfg.input_dim - 2),
-        value=0.5 + cfg.adv_eps_eval,
-    )[np.newaxis, ...]
+    def get_render(net: FCNet, d1: int, d2: int):
+        return net.render_2d_slice(
+            d1=d1,
+            d2=d2,
+            side_samples=cfg.viz_side_samples,
+            batch_size=cfg.eval_batch_size,
+            lo=cfg.input_lo,
+            hi=cfg.input_hi,
+        )
 
-    return [
-        wandb.Image(
-            torchvision.utils.make_grid(
-                [torch.tensor(student_viz_nat), torch.tensor(teacher_viz_nat)],
-                nrow=2,
-                ncol=1,
-            ).float(),
-            caption="Nat viz: student (left), teacher (right)",
-        ),
-        wandb.Image(
-            torchvision.utils.make_grid(
-                [torch.tensor(student_viz_adv), torch.tensor(teacher_viz_adv)],
-                nrow=2,
-                ncol=1,
-            ).float(),
-            caption="Adv viz: student (left), teacher (right)",
-        ),
-    ]
+    imgs: list[wandb.Image] = []
+    n_viz_dims = min(cfg.n_viz_dims, cfg.input_dim)
+    for d1 in range(n_viz_dims):
+        for d2 in range(d1, n_viz_dims):
+            student_render = get_render(student_net, d1=d1, d2=d2)
+            teacher_render = get_render(teacher_net, d1=d1, d2=d2)
+
+            imgs.append(
+                wandb.Image(
+                    torchvision.utils.make_grid(
+                        [
+                            torch.tensor(student_render),
+                            torch.tensor(teacher_render),
+                        ],
+                        nrow=2,
+                        ncol=1,
+                    ).float(),
+                    caption="Student (left), Teacher (right)",
+                )
+            )
+
+    return imgs
 
 
 @dataclasses.dataclass
 class BatchOutput:
     size: int
 
-    loss: torch.Tensor
-    loss_nat: float
-    loss_adv: float
+    mse: float
+    rmse: float
 
-    acc_nat: float
-    acc_adv: float
-    acc: float
+    loss: torch.Tensor
 
 
 def process_batch(
-    xs_nat_raw: torch.Tensor,
+    xs: torch.Tensor,
     net: nn.Module,
     teacher_net: nn.Module,
-    attack: FastPGD,
     cfg: ExperimentConfig,
-    eval_mode: bool = False,
 ):
-    xs_nat_raw = xs_nat_raw.cuda()
-
-    xs_nat = cfg.prepare_batch(xs_nat_raw)
-    xs_adv: torch.Tensor = attack(xs_nat, torch.Tensor())
+    xs = xs.cuda()
+    with torch.autocast("cuda"):  # type: ignore
+        preds = net(xs)
 
     with torch.autocast("cuda"):  # type: ignore
         with torch.no_grad():
-            teacher_logits_nat = teacher_net(xs_nat)
-            teacher_logits_adv = teacher_net(xs_adv)
+            teacher_preds = teacher_net(xs)
 
-    labs_nat = targets_nat = teacher_logits_nat.argmax(dim=-1)
-    labs_adv = targets_adv = teacher_logits_adv.argmax(dim=-1)
-
-    if cfg.teacher_use_softmax:
-        targets_nat = teacher_logits_nat.softmax(dim=-1)
-        targets_adv = teacher_logits_adv.softmax(dim=-1)
-
-    with torch.no_grad() if eval_mode else contextlib.nullcontext():
-        with torch.autocast("cuda"):  # type: ignore
-            if cfg.do_adv_training:
-                logits_adv = net(xs_adv)
-                loss_adv = F.cross_entropy(logits_adv, targets_adv)
-                loss = loss_adv
-                with torch.no_grad():
-                    logits_nat = net(xs_nat)
-                    loss_nat = F.cross_entropy(logits_nat, targets_nat)
-            else:
-                logits_nat = net(xs_nat)
-                loss_nat = F.cross_entropy(logits_nat, targets_nat)
-                loss = loss_nat
-                with torch.no_grad():
-                    logits_adv = net(xs_adv)
-                    loss_adv = F.cross_entropy(logits_adv, targets_adv)
-
-    preds_nat = logits_nat.argmax(dim=-1)
-    preds_adv = logits_adv.argmax(dim=-1)
-    acc_nat: float = preds_nat.eq(labs_nat).float().mean().item()
-    acc_adv: float = preds_adv.eq(labs_adv).float().mean().item()
+    mse = F.mse_loss(input=preds, target=teacher_preds)
+    rmse = torch.sqrt(mse)
 
     return BatchOutput(
-        size=xs_nat_raw.shape[0],
-        loss=loss,
-        loss_nat=loss_nat.item(),
-        loss_adv=loss_adv.item(),
-        acc_nat=acc_nat,
-        acc_adv=acc_adv,
-        acc=acc_adv if cfg.do_adv_training else acc_nat,
+        size=xs.shape[0],
+        mse=mse.item(),
+        rmse=rmse.item(),
+        loss=mse,
     )
 
 
@@ -340,60 +295,42 @@ def evaluate(
     net: FCNet,
     teacher_net: FCNet,
     loader: torch.utils.data.DataLoader,
-    attack: FastPGD,
     cfg: ExperimentConfig,
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
     n: int = len(loader.dataset)  # type: ignore
 
-    n_correct_nat: float = 0
-    n_correct_adv: float = 0
-    tot_loss_nat: float = 0
-    tot_loss_adv: float = 0
+    tot_loss: float = 0
+    tot_se: float = 0
 
-    xs_nat_raw: torch.Tensor
+    xs: torch.Tensor
     with tqdm(total=len(loader)) as pbar:
-        for (xs_nat_raw,) in loader:
-            bo = process_batch(
-                xs_nat_raw=xs_nat_raw,
-                net=net,
-                teacher_net=teacher_net,
-                attack=attack,
-                cfg=cfg,
-                eval_mode=True,
-            )
+        for (xs,) in loader:
+            with torch.no_grad():
+                bo = process_batch(
+                    xs=xs,
+                    net=net,
+                    teacher_net=teacher_net,
+                    cfg=cfg,
+                )
 
-            n_correct_nat += bo.acc_nat * bo.size
-            n_correct_adv += bo.acc_adv * bo.size
-
-            tot_loss_nat += bo.loss_nat * bo.size
-            tot_loss_adv += bo.loss_adv * bo.size
+            tot_loss += bo.loss.item() * bo.size
+            tot_se += bo.mse * bo.size
 
             pbar.update(1)
 
     return (
         dict(
-            acc_nat=Metric(n_correct_nat / n, "max"),
-            acc_adv=Metric(n_correct_adv / n, "max"),
-            loss_nat=Metric(tot_loss_nat / n, "min"),
-            loss_adv=Metric(tot_loss_adv / n, "min"),
-            acc=Metric(
-                n_correct_adv / n if cfg.do_adv_training else n_correct_nat / n,
-                "max",
-            ),
-            loss=Metric(
-                tot_loss_adv / n if cfg.do_adv_training else tot_loss_nat / n,
-                "min",
-            ),
+            loss=Metric(tot_loss / n, "min"),
+            mse=Metric(tot_se / n, "min"),
+            rmse=Metric(np.sqrt(tot_se / n), "min"),
         ),
-        get_imgs_to_log(net=net, teacher_net=teacher_net, cfg=cfg),
+        get_imgs_to_log(student_net=net, teacher_net=teacher_net, cfg=cfg),
     )
 
 
 def train(
     net: FCNet,
     teacher_net: FCNet,
-    attack_train: FastPGD,
-    attack_val: FastPGD,
     cfg: ExperimentConfig,
 ):
     loader_train = cfg.get_loader_train()
@@ -416,8 +353,8 @@ def train(
     min_val_loss: float = np.inf
     with tqdm() as pbar:
         while True:  # Termination will be handled outside
-            xs_nat_raw: torch.Tensor
-            for (xs_nat_raw,) in loader_train:
+            xs: torch.Tensor
+            for (xs,) in loader_train:
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
                     print(
@@ -426,10 +363,9 @@ def train(
                     return
 
                 bo = process_batch(
-                    xs_nat_raw=xs_nat_raw,
+                    xs=xs,
                     net=net,
                     teacher_net=teacher_net,
-                    attack=attack_train,
                     cfg=cfg,
                 )
 
@@ -441,7 +377,7 @@ def train(
                 n_steps += 1
                 pbar.update(1)
                 pbar.set_description(
-                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; acc={bo.acc:.4f}; lr={cur_lr:6e}"
+                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; rmse={bo.rmse:.6e}; lr={cur_lr:6e}"
                 )
 
                 log_dict: dict[str, Metric] = dict()
@@ -451,7 +387,6 @@ def train(
                         net=net,
                         teacher_net=teacher_net,
                         loader=loader_val,
-                        attack=attack_val,
                         cfg=cfg,
                     )
                     net.train()
@@ -463,7 +398,7 @@ def train(
                         wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
                         save_model(net)
 
-                    log_dict |= tag_dict(val_dict, prefix=f"val_")
+                    log_dict |= utils.tag_dict(val_dict, prefix=f"val_")
                     log_dict["val_imgs"] = Metric(val_imgs)
 
                 wandb_log(
@@ -472,11 +407,8 @@ def train(
                         epoch=Metric(n_epochs),
                         lr=Metric(cur_lr),
                         train_loss=Metric(bo.loss.item(), "min"),
-                        train_acc=Metric(bo.acc, "max"),
-                        train_loss_nat=Metric(bo.loss_nat, "min"),
-                        train_loss_adv=Metric(bo.loss_adv, "min"),
-                        train_acc_nat=Metric(bo.acc_nat, "max"),
-                        train_acc_adv=Metric(bo.acc_adv, "max"),
+                        train_mse=Metric(bo.mse, "min"),
+                        train_rmse=Metric(bo.rmse, "min"),
                     )
                     | log_dict
                 )
@@ -490,40 +422,12 @@ def run_experiment(cfg: ExperimentConfig):
     teacher_net: FCNet = cfg.get_teacher().cuda()
     teacher_net.eval()
 
-    attack_loss = TeacherCrossEntropy(teacher_net, use_softmax=False)
-
-    attack_train = FastPGD(
-        model=net,
-        eps=cfg.adv_eps_train,
-        alpha=cfg.adv_eps_train / cfg.pgd_steps * 2.3
-        if cfg.pgd_steps > 0
-        else 0,
-        steps=cfg.pgd_steps,
-        random_start=True,
-        loss=attack_loss,
-    )
-
-    attack_val = FastPGD(
-        model=net,
-        eps=cfg.adv_eps_eval,
-        alpha=cfg.adv_eps_eval / cfg.pgd_steps * 2.3
-        if cfg.pgd_steps > 0
-        else 0,
-        steps=cfg.pgd_steps,
-        random_start=True,
-        loss=attack_loss,
-    )
-
-    attack_test = attack_val
-
     torch.random.manual_seed(cfg.global_seed)
 
     try:
         train(
             net=net,
             teacher_net=teacher_net,
-            attack_train=attack_train,
-            attack_val=attack_val,
             cfg=cfg,
         )
     except KeyboardInterrupt:  # Catches SIGINT more generally
@@ -537,13 +441,12 @@ def run_experiment(cfg: ExperimentConfig):
     test_dict, test_imgs = evaluate(
         net=net,
         loader=loader_test,
-        attack=attack_test,
         cfg=cfg,
         teacher_net=teacher_net,
     )
 
     wandb_log({f"test_imgs": Metric(test_imgs)})
-    test_metrics = tag_dict(test_dict, prefix=f"test_")
+    test_metrics = utils.tag_dict(test_dict, prefix=f"test_")
     for name, metric in test_metrics.items():
         wandb.run.summary[name] = metric.data  # type: ignore
 
@@ -563,7 +466,7 @@ def main():
     # Initialize wandb
     wandb.init(
         entity="data-frugal-learning",
-        project="adv-train-student-teacher",
+        project="student-teacher-v2",
         dir=cfg.wandb_dir,
         tags=cfg.tags,
         config=dataclasses.asdict(cfg),
