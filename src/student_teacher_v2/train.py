@@ -1,11 +1,10 @@
 import dataclasses
 import enum
-import os
-import warnings
-from typing import Generic, Optional, TypeVar
+from typing import TypeVar
 
 import mup
 import numpy as np
+import PIL.Image
 import torch
 import torch.cuda.amp
 import torch.nn.functional as F
@@ -15,6 +14,7 @@ import wandb
 from simple_parsing import ArgumentParser
 from src.student_teacher_v2 import utils
 from src.student_teacher_v2.fc_net import FCNet
+from src.student_teacher_v2.utils import Metric
 from torch import nn
 from tqdm.auto import tqdm
 
@@ -35,15 +35,15 @@ class OptimizerT(enum.Enum):
 @dataclasses.dataclass
 class ExperimentConfig:
     # Input params
-    input_dim: int = 32
+    input_dim: int = 4
     input_lo: float = 0.0
     input_hi: float = 1.0
 
     # Network params
-    layer_widths: tuple[int, ...] = (96, 192, 1)
+    layer_widths: tuple[int, ...] = (2, 1)
     activation: ActivationT = ActivationT.ReLU
-    teacher_seed: int = 42
-    student_seed: int = 0
+    teacher_seed: int = 101
+    student_seed: int = 103
 
     # Optimizer params
     optimizer: OptimizerT = OptimizerT.AdamW
@@ -54,9 +54,9 @@ class ExperimentConfig:
     lr_decay_patience_evals: int = 5
 
     # Dataset params
-    n_train: int = 2048  # -1 means infinite data
-    n_val: int = 512 * 100
-    n_test: int = 512 * 1000
+    n_train: int = 1_000_000  # -1 means infinite data
+    n_val: int = 10_000
+    n_test: int = 100_000
 
     ds_train_seed: int = -1
     ds_val_seed: int = -2
@@ -66,7 +66,7 @@ class ExperimentConfig:
     batch_size: int = 256
 
     # Eval params
-    eval_batch_size: int = 512
+    eval_batch_size: int = 2048
     samples_per_eval: int = 512 * 100  # (51200) aka epoch size
 
     # Vizualization params
@@ -172,58 +172,13 @@ class ExperimentConfig:
         raise ValueError(self.optimizer)
 
 
-@dataclasses.dataclass
-class Metric(Generic[T]):
-    data: T
-    summary: Optional[str] = None
-
-
-WANDB_METRIC_SUMMARY_MAP: dict[str, Optional[str]] = dict()
-
-
-def wandb_log(d: dict[str, Metric]):
-    for name, metric in d.items():
-        if name not in WANDB_METRIC_SUMMARY_MAP:
-            WANDB_METRIC_SUMMARY_MAP[name] = metric.summary
-            if metric.summary is not None:
-                wandb.define_metric(name=name, summary=metric.summary)
-        elif WANDB_METRIC_SUMMARY_MAP[name] != metric.summary:
-            s1 = WANDB_METRIC_SUMMARY_MAP[name]
-            s2 = metric.summary
-            warnings.warn(
-                f"metric {name} has different summaries: {s1}, {s2}",
-                RuntimeWarning,
-            )
-
-    wandb.log({name: metric.data for name, metric in d.items()})
-
-
-def save_model(model: nn.Module):
-    print("Saving model checkpoint...")
-    torch.save(
-        model.state_dict(),
-        os.path.join(wandb.run.dir, "model.ckpt"),  # type: ignore
-    )
-    print("Saved model checkpoint.")
-
-
-def load_model(model: nn.Module):
-    print("Loading model checkpoint...")
-    path: str = os.path.join(wandb.run.dir, "model.ckpt")  # type: ignore
-    model.load_state_dict(torch.load(path))
-    print("Loaded model checkpoint.")
-
-
 def get_imgs_to_log(
     student_net: FCNet,
     teacher_net: FCNet,
     cfg: ExperimentConfig,
 ) -> list[wandb.Image]:
-    # Visualization of various 2x2 grids:
-    # Student | Teacher
-
-    def get_render(net: FCNet, d1: int, d2: int):
-        return net.render_2d_slice(
+    def get_render(net: FCNet, d1: int, d2: int) -> torch.Tensor:
+        raw_render = net.render_2d_slice(
             d1=d1,
             d2=d2,
             side_samples=cfg.viz_side_samples,
@@ -231,25 +186,36 @@ def get_imgs_to_log(
             lo=cfg.input_lo,
             hi=cfg.input_hi,
         )
+        return torch.tensor(raw_render[np.newaxis, :, :]).float()
 
     imgs: list[wandb.Image] = []
     n_viz_dims = min(cfg.n_viz_dims, cfg.input_dim)
     for d1 in range(n_viz_dims):
-        for d2 in range(d1, n_viz_dims):
+        for d2 in range(d1 + 1, n_viz_dims):
             student_render = get_render(student_net, d1=d1, d2=d2)
             teacher_render = get_render(teacher_net, d1=d1, d2=d2)
 
+            mean = teacher_render.mean()
+            std = torch.std(teacher_render) + 1e-6
+
+            student_render = ((student_render - mean) / std).sigmoid()
+            teacher_render = ((teacher_render - mean) / std).sigmoid()
+
+            combined_render: np.ndarray = (
+                torchvision.utils.make_grid(
+                    [student_render, teacher_render], nrow=2, ncol=1
+                )
+                .cpu()
+                .numpy()
+            )[0]
+            assert combined_render.ndim == 2
+
+            combined_img = PIL.Image.fromarray(np.uint8(combined_render * 255))
+
             imgs.append(
                 wandb.Image(
-                    torchvision.utils.make_grid(
-                        [
-                            torch.tensor(student_render),
-                            torch.tensor(teacher_render),
-                        ],
-                        nrow=2,
-                        ncol=1,
-                    ).float(),
-                    caption="Student (left), Teacher (right)",
+                    combined_img,
+                    caption=f"Student (left), Teacher (right); h={d1} w={d2}",
                 )
             )
 
@@ -396,12 +362,12 @@ def train(
                     if val_loss < min_val_loss:
                         min_val_loss = val_loss
                         wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
-                        save_model(net)
+                        utils.save_model(net, model_name="student")
 
                     log_dict |= utils.tag_dict(val_dict, prefix=f"val_")
                     log_dict["val_imgs"] = Metric(val_imgs)
 
-                wandb_log(
+                utils.wandb_log(
                     dict(
                         step=Metric(n_steps),
                         epoch=Metric(n_epochs),
@@ -421,6 +387,7 @@ def run_experiment(cfg: ExperimentConfig):
 
     teacher_net: FCNet = cfg.get_teacher().cuda()
     teacher_net.eval()
+    utils.save_model(teacher_net, model_name="teacher")
 
     torch.random.manual_seed(cfg.global_seed)
 
@@ -433,7 +400,7 @@ def run_experiment(cfg: ExperimentConfig):
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
-    load_model(net)
+    utils.load_model(net, model_name="student")
 
     loader_test = cfg.get_loader_test()
     net.eval()
@@ -445,7 +412,7 @@ def run_experiment(cfg: ExperimentConfig):
         teacher_net=teacher_net,
     )
 
-    wandb_log({f"test_imgs": Metric(test_imgs)})
+    utils.wandb_log({f"test_imgs": Metric(test_imgs)})
     test_metrics = utils.tag_dict(test_dict, prefix=f"test_")
     for name, metric in test_metrics.items():
         wandb.run.summary[name] = metric.data  # type: ignore

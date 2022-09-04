@@ -68,7 +68,7 @@ class FCNet(nn.Module):
             xy_full[:, d1] = xy[:, 0]
             xy_full[:, d2] = xy[:, 1]
 
-            with torch.autocast(self.device):  # type: ignore
+            with torch.autocast(self.device.type):  # type: ignore
                 with torch.no_grad():
                     zs = utils.batch_execute(
                         fn=lambda xs: output_transform(

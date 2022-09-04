@@ -1,7 +1,13 @@
-from typing import Callable, TypeVar
+import dataclasses
+import os
+import warnings
+from typing import Callable, Generic, Optional, TypeVar
 
+import einops
 import numpy as np
 import torch
+import wandb
+from torch import nn
 
 T = TypeVar("T")
 
@@ -41,10 +47,54 @@ def render_2d_image(
     """Should only be called on a pred_fn that takes 2d inputs."""
     s = slice(0, 1, 1j * side_samples)
 
-    XY = np.mgrid[s, s].T * (hi - lo) + lo
+    XY = einops.rearrange(
+        np.mgrid[s, s] * (hi - lo) + lo, "d h w -> h w d", d=2
+    )
     assert XY.shape == (side_samples, side_samples, 2)
 
     zs = fn(XY.reshape(-1, 2))
     assert zs.shape == (side_samples**2, 1)
 
     return zs.reshape(side_samples, side_samples)
+
+
+def save_model(model: nn.Module, model_name: str):
+    print("Saving model checkpoint...")
+    torch.save(
+        model.state_dict(),
+        os.path.join(wandb.run.dir, f"{model_name}.ckpt"),  # type: ignore
+    )
+    print("Saved model checkpoint.")
+
+
+def load_model(model: nn.Module, model_name: str):
+    print("Loading model checkpoint...")
+    path: str = os.path.join(wandb.run.dir, f"{model_name}.ckpt")  # type: ignore
+    model.load_state_dict(torch.load(path))
+    print("Loaded model checkpoint.")
+
+
+@dataclasses.dataclass
+class Metric(Generic[T]):
+    data: T
+    summary: Optional[str] = None
+
+
+WANDB_METRIC_SUMMARY_MAP: dict[str, Optional[str]] = dict()
+
+
+def wandb_log(d: dict[str, Metric]):
+    for name, metric in d.items():
+        if name not in WANDB_METRIC_SUMMARY_MAP:
+            WANDB_METRIC_SUMMARY_MAP[name] = metric.summary
+            if metric.summary is not None:
+                wandb.define_metric(name=name, summary=metric.summary)
+        elif WANDB_METRIC_SUMMARY_MAP[name] != metric.summary:
+            s1 = WANDB_METRIC_SUMMARY_MAP[name]
+            s2 = metric.summary
+            warnings.warn(
+                f"metric {name} has different summaries: {s1}, {s2}",
+                RuntimeWarning,
+            )
+
+    wandb.log({name: metric.data for name, metric in d.items()})
