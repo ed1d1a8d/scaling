@@ -40,8 +40,9 @@ class ExperimentConfig:
     input_hi: float = 1.0
 
     # Network params
-    layer_widths: tuple[int, ...] = (2, 1)
     activation: ActivationT = ActivationT.ReLU
+    teacher_widths: tuple[int, ...] = (2, 1)
+    student_width_scale_factor: float = 1.0
     teacher_seed: int = 101
     student_seed: int = 103
 
@@ -83,7 +84,7 @@ class ExperimentConfig:
         assert self.input_lo <= self.input_hi
 
         # We only support scalar outputs at the moment
-        assert self.layer_widths[-1] == 1
+        assert self.teacher_widths[-1] == 1
 
         assert self.n_train > 0 or self.n_train == -1
         assert self.min_lr < self.lr
@@ -91,6 +92,16 @@ class ExperimentConfig:
     @property
     def steps_per_eval(self):
         return utils.ceil_div(self.samples_per_eval, self.batch_size)
+
+    @property
+    def student_widths(self):
+        return tuple(
+            [
+                round(w * self.student_width_scale_factor)
+                for w in self.teacher_widths[:-1]
+            ]
+            + [1]
+        )
 
     def _get_loader(
         self, n: int, seed: int, batch_size: int
@@ -135,7 +146,7 @@ class ExperimentConfig:
         torch.random.manual_seed(self.student_seed)
         return FCNet(
             input_dim=self.input_dim,
-            layer_widths=self.layer_widths,
+            layer_widths=self.student_widths,
             activation=self.activation.value,
         )
 
@@ -143,7 +154,7 @@ class ExperimentConfig:
         torch.random.manual_seed(self.teacher_seed)
         teacher_net = FCNet(
             input_dim=self.input_dim,
-            layer_widths=self.layer_widths,
+            layer_widths=self.teacher_widths,
             activation=self.activation.value,
         )
 
