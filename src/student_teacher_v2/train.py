@@ -38,7 +38,7 @@ class OptimizerT(enum.Enum):
 class ExperimentConfig:
     # Input params
     input_dim: int = 4
-    input_lo: float = 0.0
+    input_lo: float = -1.0
     input_hi: float = 1.0
 
     # Network params
@@ -74,7 +74,7 @@ class ExperimentConfig:
     eval_batch_size: int = 2048
     samples_per_eval: int = 512 * 100  # (51200) aka epoch size
 
-    # Vizualization params
+    # Visualization params
     n_viz_dims: int = 5
     viz_side_samples: int = 256
 
@@ -105,7 +105,7 @@ class ExperimentConfig:
                 round(w * self.student_width_scale_factor)
                 for w in self.teacher_widths[:-1]
             ]
-            + [1]
+            + [self.teacher_widths[-1]]
         )
 
     def precision_context(self, net: nn.Module):
