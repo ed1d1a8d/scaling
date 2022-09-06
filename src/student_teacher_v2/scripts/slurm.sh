@@ -42,8 +42,8 @@ n_trains=(5 10 20 50 100 1000 10000 100000 1000000 10000000)
 student_seeds=(1001 1002 1003 1004 1005 1006 1007 1008 1009)
 for n_train in "\${n_trains[@]}"; do
   for student_seed in "\${student_seeds[@]}"; do
-    # Run 8 experiments in parallel
-    waitUntilNJobsRemain 8
+    # Run 12 experiments in parallel
+    waitUntilNJobsRemain 12
 
     # Run experiment
     { LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib python -m src.student_teacher_v2.train --n_train \$n_train --student_seed \$student_seed $@; } &
