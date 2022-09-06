@@ -256,11 +256,11 @@ class BatchOutput:
 
 def process_batch(
     xs: torch.Tensor,
-    net: nn.Module,
+    net: FCNet,
     teacher_net: nn.Module,
     cfg: ExperimentConfig,
 ):
-    xs = xs.cuda()
+    xs = xs.to(net.device)
     with cfg.precision_context(net):
         preds = net(xs)
 

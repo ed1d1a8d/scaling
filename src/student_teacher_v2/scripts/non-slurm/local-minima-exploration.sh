@@ -32,14 +32,15 @@ function waitUntilNJobsRemain() {
 
 # Experiment loop
 for student_seed in {1000..2000}; do
-  # Run 15 experiments in parallel
-  waitUntilNJobsRemain 15
+  # Run 20 experiments in parallel
+  waitUntilNJobsRemain 20
 
   # Run experiment
   {
     LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib \
     python -m src.student_teacher_v2.train \
       --tags local-minima-4-2-1 \
+      --num_workers 0 \
       --n_train 1000000 \
       --n_val 10000 \
       --n_test 1000000 \
