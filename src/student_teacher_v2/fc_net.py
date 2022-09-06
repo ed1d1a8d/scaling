@@ -17,6 +17,7 @@ class FCNet(nn.Module):
         activation: Type[nn.Module] = nn.ReLU,
         end_with_activation: bool = False,
         zero_final_bias: bool = False,
+        quantization_aware_training: bool = False,
     ):
         super().__init__()
         self.input_dim = input_dim
@@ -43,11 +44,19 @@ class FCNet(nn.Module):
         self.net = nn.Sequential(*_layers)
         mup.set_base_shapes(self.net, None)
 
+        self.quantization_aware_training = quantization_aware_training
+        if self.quantization_aware_training:
+            self.quant = torch.quantization.QuantStub()
+            self.dequant = torch.quantization.DeQuantStub()
+
     @property
     def device(self):
         return next(self.parameters()).device
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
+        if self.quantization_aware_training:
+            return self.dequant(self.net(self.quant(x)))
+
         return self.net(x)
 
     def render_2d_slice(

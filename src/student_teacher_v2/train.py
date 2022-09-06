@@ -7,6 +7,7 @@ import mup
 import numpy as np
 import PIL.Image
 import torch
+import torch.backends.quantized
 import torch.cuda.amp
 import torch.nn.functional as F
 import torch.utils.data
@@ -34,6 +35,14 @@ class OptimizerT(enum.Enum):
     AdamW = enum.auto()
 
 
+class QuantBackend(enum.Enum):
+    """See https://pytorch.org/docs/stable/quantization.html"""
+
+    FBGEMM = "fbgemm"
+    QNNPACK = "qnnpack"
+    ONEDNN = "onednn"
+
+
 @dataclasses.dataclass
 class ExperimentConfig:
     # Input params
@@ -49,6 +58,10 @@ class ExperimentConfig:
 
     student_width_scale_factor: float = 1.0
     student_seed: int = 103
+
+    quantize: bool = False
+    quantization_backend: QuantBackend = QuantBackend.FBGEMM
+    quantization_level: int = 8
 
     # Optimizer params
     optimizer: OptimizerT = OptimizerT.AdamW
@@ -93,6 +106,12 @@ class ExperimentConfig:
 
         assert self.n_train > 0 or self.n_train == -1
         assert self.min_lr < self.lr
+
+    @property
+    def device(self):
+        if self.quantize:
+            return "cpu"
+        return "cuda"
 
     @property
     def steps_per_eval(self):
@@ -161,6 +180,7 @@ class ExperimentConfig:
             layer_widths=self.student_widths,
             activation=self.activation.value,
             end_with_activation=self.end_with_activation,
+            quantization_aware_training=self.quantize,
         )
 
     def get_teacher(self) -> FCNet:
@@ -256,11 +276,11 @@ class BatchOutput:
 
 def process_batch(
     xs: torch.Tensor,
-    net: nn.Module,
+    net: FCNet,
     teacher_net: nn.Module,
     cfg: ExperimentConfig,
 ):
-    xs = xs.cuda()
+    xs = xs.to(net.device)
     with cfg.precision_context(net):
         preds = net(xs)
 
@@ -358,9 +378,13 @@ def train(
                 )
 
                 optimizer.zero_grad()
-                scaler.scale(bo.loss).backward()  # type: ignore
-                scaler.step(optimizer)
-                scaler.update()
+                if cfg.device == "cuda":
+                    scaler.scale(bo.loss).backward()  # type: ignore
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    bo.loss.backward()
+                    optimizer.step()
 
                 n_steps += 1
                 pbar.update(1)
@@ -405,14 +429,42 @@ def train(
 
 
 def run_experiment(cfg: ExperimentConfig):
-    net: FCNet = cfg.get_student().cuda()
+    # Initialize student
+    net: FCNet = cfg.get_student().to(cfg.device)
 
-    teacher_net: FCNet = cfg.get_teacher().cuda()
+    # Initialize teacher
+    teacher_net: FCNet = cfg.get_teacher().to(cfg.device)
     teacher_net.eval()
+    if cfg.quantize:
+        torch.backends.quantized.engine = cfg.quantization_backend.value
+
+        print("Making teacher emulate quantization...")
+        teacher_net.qconfig = torch.quantization.get_default_qconfig(cfg.quantization_backend.value)  # type: ignore
+        torch.quantization.prepare(teacher_net, inplace=True)
+        xs: torch.Tensor
+        for (xs,) in cfg.get_loader_test():
+            with torch.no_grad():
+                teacher_net(xs.to(teacher_net.device))
+        teacher_net.eval()
+        print("Teacher now emulates quantization...")
+
+        print("Saving quantized teacher.")
+        utils.save_model(
+            torch.quantization.convert(teacher_net),
+            model_name="teacher_quantized",
+        )
+
+        net.qconfig = torch.quantization.get_default_qat_qconfig(cfg.quantization_backend.value)  # type: ignore
+        torch.quantization.prepare_qat(net, inplace=False)
+        print("Prepared student for quantization aware training.")
+
+    print("Saving teacher")
     utils.save_model(teacher_net, model_name="teacher")
 
+    # Set seed for training
     torch.random.manual_seed(cfg.global_seed)
 
+    print("Starting training...")
     try:
         train(
             net=net,
@@ -421,8 +473,14 @@ def run_experiment(cfg: ExperimentConfig):
         )
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
+    print("Finished training.")
 
     utils.load_model(net, model_name="student")
+    net.eval()
+
+    if cfg.quantize:
+        print("Saving quantized student.")
+        utils.save_model(torch.quantization.convert(net), model_name="student_quantized")
 
     loader_test = cfg.get_loader_test()
     net.eval()
