@@ -32,7 +32,7 @@ function waitUntilNJobsRemain() {
 
 # Experiment loop
 for student_seed in {1000..2000}; do
-  # Run 8 experiments in parallel
+  # Run 15 experiments in parallel
   waitUntilNJobsRemain 15
 
   # Run experiment
