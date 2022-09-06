@@ -13,6 +13,5 @@ for width_scale in "${width_scales[@]}"; do
     --n_val 10000 \
     --n_test 1000000 \
     --samples_per_eval 100000 \
-    --student_width_scale_factor $width_scale \
-    --student_seed $student_seed
+    --student_width_scale_factor $width_scale
 done
