@@ -17,10 +17,15 @@ class FCNet(nn.Module):
         activation: Type[nn.Module] = nn.ReLU,
         end_with_activation: bool = False,
         zero_final_bias: bool = False,
+        input_scale: float = 1.0,
+        input_shift: float = 0.0,
     ):
         super().__init__()
         self.input_dim = input_dim
         self.layer_widths = layer_widths
+
+        self.input_scale = input_scale
+        self.input_shift = input_shift
 
         _layers: list[nn.Module] = []
         if len(layer_widths) == 1:
@@ -48,7 +53,7 @@ class FCNet(nn.Module):
         return next(self.parameters()).device
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
-        return self.net(x)
+        return self.net(self.input_scale * x + self.input_shift)
 
     def render_2d_slice(
         self,

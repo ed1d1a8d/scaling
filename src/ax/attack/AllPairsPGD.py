@@ -65,10 +65,6 @@ class AllPairsPGD:
         Overridden.
         """
         images = images.clone().detach().to(self.device)
-        with torch.no_grad():
-            with autocast():
-                n_classes = self.net1(images[:1]).shape[-1]
-        assert n_classes >= 2
 
         with autocast():
             with torch.no_grad():
@@ -77,6 +73,9 @@ class AllPairsPGD:
 
         orig_preds1 = orig_logits1.argmax(-1)
         orig_preds2 = orig_logits2.argmax(-1)
+
+        n_classes = orig_logits1.shape[-1]
+        assert n_classes >= 2
 
         adv_images = images.clone().detach().to(self.device)
         preds_differ = torch.full(
