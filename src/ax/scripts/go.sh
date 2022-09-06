@@ -12,10 +12,9 @@ for n_train in "${n_trains[@]}"; do
     ./src/ax/scripts/slurm.sh \
       --dataset CIFAR5m \
       --use_teacher True \
-      --teacher_ckpt_path /home/gridsan/groups/ccg/wandb/run-reconstructed-1s50k73h/files/model.ckpt \
       --n_test 5000 \
       --n_train $n_train \
       --do_adv_training $adv_train \
-      --tags student-teacher-v3
+      --tags student-teacher-random-init-v3
   done
 done
