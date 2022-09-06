@@ -9,7 +9,7 @@ for width_scale in "${width_scales[@]}"; do
     --tags overparam-scaling-4-2-1-try2 \
     --optimizer SGD \
     --lr 1e-2 \
-    --n_workers 0 \
+    --num_workers 0 \
     --n_val 10000 \
     --n_test 1000000 \
     --samples_per_eval 100000 \
