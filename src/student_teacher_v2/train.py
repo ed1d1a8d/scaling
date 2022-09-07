@@ -1,7 +1,7 @@
 import contextlib
 import dataclasses
 import enum
-from typing import TypeVar
+from typing import TypeVar, Union
 
 import mup
 import numpy as np
@@ -14,12 +14,17 @@ import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
 from src.student_teacher_v2 import utils
+from src.student_teacher_v2.data import (
+    FastTensorDataLoader,
+    InfiniteTensorDataLoader,
+)
 from src.student_teacher_v2.fc_net import FCNet
 from src.student_teacher_v2.utils import Metric
 from torch import nn
 from tqdm.auto import tqdm
 
 T = TypeVar("T")
+LoaderT = Union[FastTensorDataLoader, InfiniteTensorDataLoader]
 
 
 class ActivationT(enum.Enum):
@@ -67,6 +72,8 @@ class ExperimentConfig:
     ds_val_seed: int = -2
     ds_test_seed: int = -3
 
+    data_device: str = "cuda"
+
     # Train params
     batch_size: int = 256
 
@@ -79,6 +86,7 @@ class ExperimentConfig:
     viz_side_samples: int = 256
 
     # Other params
+    log_freq_in_steps: int = 10
     half_precision: bool = False
     global_seed: int = 42
     num_workers: int = 20
@@ -91,7 +99,6 @@ class ExperimentConfig:
         # We only support scalar outputs at the moment
         assert self.teacher_widths[-1] == 1
 
-        assert self.n_train > 0 or self.n_train == -1
         assert self.min_lr < self.lr
 
     @property
@@ -116,8 +123,22 @@ class ExperimentConfig:
         )
 
     def _get_loader(
-        self, n: int, seed: int, batch_size: int
-    ) -> torch.utils.data.DataLoader:
+        self, n: int, seed: int, batch_size: int, shuffle: bool
+    ) -> LoaderT:
+        if n == -1:
+            return InfiniteTensorDataLoader(
+                gen_batch_fn=lambda bs, rng: (
+                    torch.rand(size=(bs, self.input_dim), generator=rng)
+                    * (self.input_hi - self.input_lo)
+                    + self.input_lo,
+                ),
+                batch_size=batch_size,
+                device=self.data_device,
+                seed=seed,
+            )
+
+        assert n > 0
+
         xs = (
             torch.rand(
                 size=(n, self.input_dim),
@@ -126,11 +147,12 @@ class ExperimentConfig:
             * (self.input_hi - self.input_lo)
             + self.input_lo
         )
-        return torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(xs),
+        return FastTensorDataLoader(
+            xs,
             batch_size=batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
+            shuffle=shuffle,
+            device=self.data_device,
+            seed=seed,
         )
 
     def get_loader_train(self):
@@ -138,6 +160,7 @@ class ExperimentConfig:
             n=self.n_train,
             seed=self.ds_train_seed,
             batch_size=self.batch_size,
+            shuffle=True,
         )
 
     def get_loader_val(self):
@@ -145,6 +168,7 @@ class ExperimentConfig:
             n=self.n_val,
             seed=self.ds_val_seed,
             batch_size=self.batch_size,
+            shuffle=False,
         )
 
     def get_loader_test(self):
@@ -152,6 +176,7 @@ class ExperimentConfig:
             n=self.n_test,
             seed=self.ds_test_seed,
             batch_size=self.batch_size,
+            shuffle=False,
         )
 
     def get_student(self) -> FCNet:
@@ -282,10 +307,11 @@ def process_batch(
 def evaluate(
     net: FCNet,
     teacher_net: FCNet,
-    loader: torch.utils.data.DataLoader,
+    loader: LoaderT,
     cfg: ExperimentConfig,
 ) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
-    n: int = len(loader.dataset)  # type: ignore
+    assert isinstance(loader, FastTensorDataLoader)
+    n: int = loader.dataset_len
 
     tot_loss: float = 0
     tot_se: float = 0
@@ -389,17 +415,18 @@ def train(
                     log_dict |= utils.tag_dict(val_dict, prefix=f"val_")
                     log_dict["val_imgs"] = Metric(val_imgs)
 
-                utils.wandb_log(
-                    dict(
-                        step=Metric(n_steps),
-                        epoch=Metric(n_epochs),
-                        lr=Metric(cur_lr),
-                        train_loss=Metric(bo.loss.item(), "min"),
-                        train_mse=Metric(bo.mse, "min"),
-                        train_rmse=Metric(bo.rmse, "min"),
+                if len(log_dict) > 0 or n_steps % cfg.log_freq_in_steps == 0:
+                    utils.wandb_log(
+                        dict(
+                            step=Metric(n_steps),
+                            epoch=Metric(n_epochs),
+                            lr=Metric(cur_lr),
+                            train_loss=Metric(bo.loss.item(), "min"),
+                            train_mse=Metric(bo.mse, "min"),
+                            train_rmse=Metric(bo.rmse, "min"),
+                        )
+                        | log_dict
                     )
-                    | log_dict
-                )
 
             n_epochs += 1
 
