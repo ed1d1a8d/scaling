@@ -16,6 +16,7 @@ sbatch <<EOT
 # Slurm sbatch options
 #SBATCH -o slurm-logs/student-teacher-v2/log-%j
 #SBATCH -c 20
+#SBATCH --gres=gpu:volta:1
 
 # Load conda environment.
 # See https://github.com/conda/conda/issues/7980#issuecomment-441358406
