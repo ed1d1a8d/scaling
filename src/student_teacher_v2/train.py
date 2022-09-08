@@ -90,7 +90,6 @@ class ExperimentConfig:
     log_freq_in_steps: int = 10
     half_precision: bool = False
     global_seed: int = 42
-    num_workers: int = 20
     tags: tuple[str, ...] = ("test",)
     wandb_dir: Optional[str] = "/home/gridsan/groups/ccg"
 
