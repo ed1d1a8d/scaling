@@ -1,7 +1,8 @@
 import contextlib
 import dataclasses
 import enum
-from typing import TypeVar, Union
+import tempfile
+from typing import Optional, TypeVar, Union
 
 import mup
 import numpy as np
@@ -42,12 +43,12 @@ class OptimizerT(enum.Enum):
 @dataclasses.dataclass
 class ExperimentConfig:
     # Input params
-    input_dim: int = 4
+    input_dim: int = 8
     input_lo: float = -1.0
     input_hi: float = 1.0
 
     # Network params
-    teacher_widths: tuple[int, ...] = (2, 1)
+    teacher_widths: tuple[int, ...] = (96, 192, 1)
     activation: ActivationT = ActivationT.ReLU
     end_with_activation: bool = False
     teacher_seed: int = 101
@@ -64,7 +65,7 @@ class ExperimentConfig:
     lr_decay_patience_evals: int = 5
 
     # Dataset params
-    n_train: int = 1_000_000  # -1 means infinite data
+    n_train: int = -1  # -1 means infinite data
     n_val: int = 10_000
     n_test: int = 100_000
 
@@ -91,7 +92,7 @@ class ExperimentConfig:
     global_seed: int = 42
     num_workers: int = 20
     tags: tuple[str, ...] = ("test",)
-    wandb_dir: str = "/home/gridsan/groups/ccg"
+    wandb_dir: Optional[str] = "/home/gridsan/groups/ccg"
 
     def __post_init__(self):
         assert self.input_lo <= self.input_hi
@@ -476,20 +477,31 @@ def main():
     args = parser.parse_args()
     cfg: ExperimentConfig = args.experiment_config
 
-    # Uncomment the line below if you don't want to upload ckpt's to wandb
-    # os.environ["WANDB_IGNORE_GLOBS"] = "*.ckpt"
+    wandb_dir = cfg.wandb_dir
+    with (
+        tempfile.TemporaryDirectory(prefix="/var/tmp/")
+        if wandb_dir is None
+        else contextlib.nullcontext()
+    ) as tmp_wandb_dir:
+        if wandb_dir is None:
+            assert tmp_wandb_dir is not None
+            wandb_dir = tmp_wandb_dir
+            print(f"Using temprorary wandb directory: {wandb_dir}")
 
-    # Initialize wandb
-    wandb.init(
-        entity="data-frugal-learning",
-        project="student-teacher-v2",
-        dir=cfg.wandb_dir,
-        tags=cfg.tags,
-        config=dataclasses.asdict(cfg),
-        save_code=True,
-    )
+        # Initialize wandb
+        wandb.init(
+            entity="data-frugal-learning",
+            project="student-teacher-v2",
+            dir=wandb_dir,
+            tags=cfg.tags,
+            config=dataclasses.asdict(cfg),
+            save_code=True,
+        )
 
-    run_experiment(cfg)
+        run_experiment(cfg)
+
+        # Finish wandb
+        wandb.finish()
 
 
 if __name__ == "__main__":
