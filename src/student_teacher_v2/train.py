@@ -91,7 +91,7 @@ class ExperimentConfig:
     half_precision: bool = False
     global_seed: int = 42
     tags: tuple[str, ...] = ("test",)
-    wandb_dir: Optional[str] = "/home/gridsan/groups/ccg"
+    wandb_dir: Optional[str] = None
 
     def __post_init__(self):
         assert self.input_lo <= self.input_hi
