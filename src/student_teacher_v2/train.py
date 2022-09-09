@@ -43,12 +43,12 @@ class OptimizerT(enum.Enum):
 @dataclasses.dataclass
 class ExperimentConfig:
     # Input params
-    input_dim: int = 8
+    input_dim: int = 4
     input_lo: float = -1.0
     input_hi: float = 1.0
 
     # Network params
-    teacher_widths: tuple[int, ...] = (96, 192, 1)
+    teacher_widths: tuple[int, ...] = (2, 1)
     activation: ActivationT = ActivationT.ReLU
     end_with_activation: bool = False
     teacher_seed: int = 101
@@ -59,7 +59,7 @@ class ExperimentConfig:
     # Optimizer params
     optimizer: OptimizerT = OptimizerT.AdamW
     momentum: float = 0.9  # only for SGD
-    weight_decay: float = 5e-4
+    weight_decay: float = 0
     lr: float = 1e-3
     min_lr: float = 1e-6
     lr_decay_patience_evals: int = 5
@@ -122,9 +122,7 @@ class ExperimentConfig:
             else contextlib.nullcontext()
         )
 
-    def _get_loader(
-        self, n: int, seed: int, batch_size: int, shuffle: bool
-    ) -> LoaderT:
+    def _get_loader(self, n: int, seed: int, batch_size: int, shuffle: bool) -> LoaderT:
         if n == -1:
             return InfiniteTensorDataLoader(
                 gen_batch_fn=lambda bs, rng: (
@@ -371,9 +369,7 @@ def train(
             for (xs,) in loader_train:
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
-                    print(
-                        "Validation loss has stopped improving. Stopping training..."
-                    )
+                    print("Validation loss has stopped improving. Stopping training...")
                     return
 
                 bo = process_batch(
