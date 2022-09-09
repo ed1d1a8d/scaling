@@ -13,5 +13,6 @@ for start_seed in "${start_seeds[@]}"; do
     --n_train -1 \
     --n_val 10000 \
     --n_test 1000000 \
-    --samples_per_eval 100000
+    --samples_per_eval 100000 \
+    --wandb_dir
 done
