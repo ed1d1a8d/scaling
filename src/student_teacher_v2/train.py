@@ -86,7 +86,7 @@ class ExperimentConfig:
     viz_od_value: float = 0.42
 
     # How much train loss has to decrease before we visualize the networks
-    viz_loss_decrease_thresh: float = 0.5
+    viz_loss_decrease_thresh: float = 0.1
 
     # Other params
     log_freq_in_steps: int = 1000
@@ -125,7 +125,13 @@ class ExperimentConfig:
             else contextlib.nullcontext()
         )
 
-    def _get_loader(self, n: int, seed: int, batch_size: int, shuffle: bool) -> LoaderT:
+    def _get_loader(
+        self,
+        n: int,
+        seed: int,
+        batch_size: int,
+        shuffle: bool,
+    ) -> LoaderT:
         if n == -1:
             return InfiniteTensorDataLoader(
                 gen_batch_fn=lambda bs, rng: (
@@ -378,7 +384,9 @@ def train(
             for (xs,) in loader_train:
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
-                    print("Validation loss has stopped improving. Stopping training...")
+                    print(
+                        "Validation loss has stopped improving. Stopping training..."
+                    )
                     return
 
                 bo = process_batch(
@@ -421,7 +429,7 @@ def train(
 
                 if (
                     bo.loss.item()
-                    <= cfg.viz_loss_decrease_thresh * last_viz_train_loss
+                    < cfg.viz_loss_decrease_thresh * last_viz_train_loss
                 ):
                     print("Visualizing the student and teacher!")
                     last_viz_train_loss = bo.loss.item()

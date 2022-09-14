@@ -9,6 +9,6 @@ for width_scale in "${width_scales[@]}"; do
     --tags overparam-scaling-4-2-1-try3 \
     --n_val 10000 \
     --n_test 1000000 \
-    --samples_per_eval 100000 \
+    --samples_per_eval 1000000 \
     --student_width_scale_factor $width_scale
 done
