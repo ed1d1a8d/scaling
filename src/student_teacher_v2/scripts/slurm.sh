@@ -38,10 +38,10 @@ function waitUntilNJobsRemain() {
 }
 
 # Experiment loop
-n_trains=(5 10 20 50 100 1000 10000 100000 1000000 10000000)
+n_trains=(5 10 20 50 100 1000 10000 100000 1000000 10000000 -1)
 student_seeds=(1001 1002 1003 1004 1005 1006 1007 1008 1009)
-for n_train in "\${n_trains[@]}"; do
-  for student_seed in "\${student_seeds[@]}"; do
+for student_seed in "\${student_seeds[@]}"; do
+  for n_train in "\${n_trains[@]}"; do
     # Run 12 experiments in parallel
     waitUntilNJobsRemain 12
 

@@ -86,7 +86,7 @@ class ExperimentConfig:
     viz_od_value: float = 0.42
 
     # How much train loss has to decrease before we visualize the networks
-    viz_loss_decrease_thresh: float = 0.75
+    viz_loss_decrease_thresh: float = 0.5
 
     # Other params
     log_freq_in_steps: int = 1000
