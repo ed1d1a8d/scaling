@@ -3,7 +3,7 @@ from typing import Callable, Type
 import mup
 import numpy as np
 import torch
-from src.student_teacher_v2 import utils
+from src.student_teacher_v2 import utils, viz
 from torch import nn
 
 
@@ -92,6 +92,6 @@ class FCNet(nn.Module):
 
             return zs.cpu().numpy()
 
-        return utils.render_2d_image(
+        return viz.render_2d_image(
             fn=custom_forward, side_samples=side_samples, lo=lo, hi=hi
         )
