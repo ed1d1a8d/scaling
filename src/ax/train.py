@@ -12,6 +12,8 @@ import torch
 import torch.cuda.amp
 import torch.nn.functional as F
 import torch.utils.data
+import torchvision.models
+import torchvision.transforms
 import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
@@ -21,7 +23,7 @@ from src.ax.attack.FastPGD import FastPGD
 from src.ax.attack.teacher_loss import TeacherCrossEntropy
 from src.ax.data import cifar, synthetic
 from src.ax.models import vit, wrn
-from torch import nn
+from torch import nn, optim
 from tqdm.auto import tqdm
 
 T = TypeVar("T")
@@ -43,6 +45,7 @@ def tag_dict(
 class ModelT(enum.Enum):
     WideResNet = enum.auto()
     VisionTransformer = enum.auto()
+    EfficientNet = enum.auto()
 
 
 class DatasetT(enum.Enum):
@@ -309,15 +312,43 @@ class ExperimentConfig:
                 is_cls_token=False,
             )
 
+        if self.model is ModelT.EfficientNet:
+            assert self.depth in (1, 2, 3)
+            model: nn.Module
+
+            if self.depth == 1:
+                model = torchvision.models.efficientnet_v2_s(
+                    weights=None, num_classes=self.num_classes
+                )
+            elif self.depth == 2:
+                model = torchvision.models.efficientnet_v2_m(
+                    weights=None, num_classes=self.num_classes
+                )
+            else:
+                model = torchvision.models.efficientnet_v2_l(
+                    weights=None, num_classes=self.num_classes
+                )
+
+            return nn.Sequential(
+                torchvision.transforms.Resize(size=(224, 224)), model
+            )
+
         raise ValueError(self.model)
 
     def get_optimizer(self, net: nn.Module):
         if self.optimizer is OptimizerT.AdamW:
-            return mup.MuAdamW(
-                net.parameters(),
-                lr=self.lr,
-                weight_decay=self.weight_decay,
-            )
+            if self.model is ModelT.EfficientNet:
+                return optim.AdamW(
+                    net.parameters(),
+                    lr=self.lr,
+                    weight_decay=self.weight_decay,
+                )
+            else:
+                return mup.MuAdamW(
+                    net.parameters(),
+                    lr=self.lr,
+                    weight_decay=self.weight_decay,
+                )
 
         if self.optimizer is OptimizerT.SGD:
             return mup.MuSGD(
@@ -731,6 +762,7 @@ def run_experiment(cfg: ExperimentConfig):
 
     net: nn.Module = cfg.get_net().cuda()
     net = net.to(memory_format=torch.channels_last)  # type: ignore
+    print(f"# student params: {sum(p.numel() for p in net.parameters())}")
 
     teacher_net: Optional[nn.Module] = None
     if cfg.use_teacher:
