@@ -3,19 +3,18 @@
 # This script should be launched from the root of the repository, i.e.
 # ./src/ax/scripts/go.sh
 
-# 200 300 500 1000 2000 5000 10000 20000 50000 200000 500000 2000000 5942688
-n_trains=(1000 2000 5000 10000 20000 50000 200000 500000 2000000 5942688)
-adv_trains=(False True)
-
-for n_train in "${n_trains[@]}"; do
-  for adv_train in "${adv_trains[@]}"; do
+launch_series () {
+  n_trains=(500 1000 2000 5000 10000 20000 50000 200000 500000 2000000 5942688)
+  for n_train in "${n_trains[@]}"; do
     ./src/ax/scripts/slurm.sh \
+      --tags smaller-wrns \
       --dataset CIFAR5m \
-      --use_teacher True \
-      --teacher_ckpt_path /home/gridsan/groups/ccg/wandb/run-reconstructed-2ylzpcz2/files/model.ckpt \
-      --n_test 5000 \
+      --do_adv_training True \
       --n_train $n_train \
-      --do_adv_training $adv_train \
-      --tags student-teacher-natural-init-v3
+      --depth $1 \
+      --width $2
   done
-done
+}
+
+launch_series 28 5
+launch_series 16 10
