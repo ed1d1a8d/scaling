@@ -54,3 +54,4 @@ ipywidgets
 jupyterlab
 mypy
 tqdm
+mlxtend
