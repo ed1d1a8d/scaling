@@ -1,11 +1,7 @@
 # How to use this script:
 # 1. Download infimnist from https://leon.bottou.org/projects/infimnist
-# 2. Generate the infimnist files as follows (you can substitue any number for 8109999 below, depending on how much training data you want to generate):
-# $ infimnist lab 0 9999 > test10k-labels
-# $ infimnist pat 0 9999 > test10k-patterns
-# $ infimnist lab 10000 8109999 > mnist8m-labels-idx1-ubyte
-# $ infimnist pat 10000 8109999 > mnist8m-patterns-idx3-ubyte
-# 3. Copy the files into scaling/data/mnist8m
+# 2. Generate the infimnist files as per the description
+# 3. Copy the files into scaling/data/mnist20m
 # 4. Run this script (make sure the filenames variable below matches the filenames you generated in step 2)
 
 import os
@@ -37,44 +33,54 @@ class NumpyDataset:
 
 
 def get_mnist_datasets(
-    xs_test_file: str, ys_test_file: str, xs_train_file: str, ys_train_file: str
+    xs_file: str,
+    ys_file: str,
+    n_val: int = 10_000,
+    n_test: int = 50_000,
 ):
-    xs_test, ys_test = loadlocal_mnist(
-        images_path=xs_test_file, labels_path=ys_test_file
-    )
-    print("Loaded test files")
 
-    xs_train, ys_train = loadlocal_mnist(
-        images_path=xs_train_file, labels_path=ys_train_file
-    )
+    xs, ys = loadlocal_mnist(images_path=xs_file, labels_path=ys_file)
     print("Loaded train files")
+
+    xs_train, ys_train = xs[: -(n_val + n_test)], ys[: -(n_val + n_test)]
+    xs_val, ys_val = (
+        xs[-(n_val + n_test) : -n_test],
+        ys[-(n_val + n_test) : -n_test],
+    )
+    xs_test, ys_test = xs[-n_test:], ys[-n_test:]
+
+    print("Val split stats")
+    print("Size:", len(ys_val))
+    print("Label freqs:", np.unique(ys_val, return_counts=True))
+
+    print("Test split stats")
+    print("Size:", len(ys_test))
+    print("Label freqs:", np.unique(ys_test, return_counts=True))
 
     return {
         "train": NumpyDataset(xs_train, ys_train),
+        "val": NumpyDataset(xs_val, ys_val),
         "test": NumpyDataset(xs_test, ys_test),
     }
 
 
 filenames = {
-    "xs_test": "test10k-patterns",
-    "ys_test": "test10k-labels",
-    "xs_train": "mnist8m-patterns-idx3-ubyte",
-    "ys_train": "mnist8m-labels-idx1-ubyte",
+    "xs": "mnist20m-patterns-idx3-ubyte",
+    "ys": "mnist20m-labels-idx1-ubyte",
 }
 
+rel_path = "data/mnist20m/"
 paths = {}
 for (name, filename) in filenames.items():
-    path = os.path.join(GIT_ROOT, f"data/mnist8m/{filename}")
+    path = os.path.join(GIT_ROOT, rel_path + filename)
     paths[name] = path
 
 
-datasets = get_mnist_datasets(
-    paths["xs_test"], paths["ys_test"], paths["xs_train"], paths["ys_train"]
-)
+datasets = get_mnist_datasets(paths["xs"], paths["ys"])
 
 for (name, ds) in datasets.items():
     writer = DatasetWriter(
-        os.path.join(GIT_ROOT, f"data/mnist8m/{name}.beton"),
+        os.path.join(GIT_ROOT, rel_path + name + ".beton"),
         {
             "image": NDArrayField(np.dtype(np.uint8), (784,)),
             "label": IntField(),
