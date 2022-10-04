@@ -51,7 +51,9 @@ class FastTensorDataLoader:
 
     def __iter__(self):
         if self.shuffle:
-            r = torch.randperm(self.dataset_len, generator=self.rng)
+            r = torch.randperm(
+                self.dataset_len, generator=self.rng, device=self.device
+            )
             self.tensors = tuple(t[r] for t in self.tensors)
         self.i = 0
         return self

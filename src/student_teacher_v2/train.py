@@ -6,15 +6,13 @@ from typing import Optional, TypeVar, Union
 
 import mup
 import numpy as np
-import PIL.Image
 import torch
 import torch.cuda.amp
 import torch.nn.functional as F
 import torch.utils.data
-import torchvision.utils
 import wandb
 from simple_parsing import ArgumentParser
-from src.student_teacher_v2 import utils
+from src.student_teacher_v2 import utils, viz
 from src.student_teacher_v2.data import (
     FastTensorDataLoader,
     InfiniteTensorDataLoader,
@@ -85,9 +83,13 @@ class ExperimentConfig:
     # Visualization params
     n_viz_dims: int = 5
     viz_side_samples: int = 256
+    viz_od_value: float = 0.42
+
+    # How much train loss has to decrease before we visualize the networks
+    viz_loss_decrease_thresh: float = 0.1
 
     # Other params
-    log_freq_in_steps: int = 10
+    log_freq_in_steps: int = 1000
     half_precision: bool = False
     global_seed: int = 42
     tags: tuple[str, ...] = ("test",)
@@ -95,11 +97,12 @@ class ExperimentConfig:
 
     def __post_init__(self):
         assert self.input_lo <= self.input_hi
-
-        # We only support scalar outputs at the moment
-        assert self.teacher_widths[-1] == 1
-
+        assert self.teacher_widths[-1] > 0
         assert self.min_lr < self.lr
+
+    @property
+    def for_classification(self):
+        return self.teacher_widths[-1] >= 2
 
     @property
     def steps_per_eval(self):
@@ -122,7 +125,13 @@ class ExperimentConfig:
             else contextlib.nullcontext()
         )
 
-    def _get_loader(self, n: int, seed: int, batch_size: int, shuffle: bool) -> LoaderT:
+    def _get_loader(
+        self,
+        n: int,
+        seed: int,
+        batch_size: int,
+        shuffle: bool,
+    ) -> LoaderT:
         if n == -1:
             return InfiniteTensorDataLoader(
                 gen_batch_fn=lambda bs, rng: (
@@ -193,6 +202,7 @@ class ExperimentConfig:
             layer_widths=self.teacher_widths,
             activation=self.activation.value,
             end_with_activation=self.end_with_activation,
+            zero_final_bias=self.for_classification,
         )
 
         return teacher_net
@@ -221,60 +231,38 @@ def get_imgs_to_log(
     teacher_net: FCNet,
     cfg: ExperimentConfig,
 ) -> list[wandb.Image]:
-    def get_render(net: FCNet, d1: int, d2: int) -> torch.Tensor:
-        with cfg.precision_context(net):
-            raw_render = net.render_2d_slice(
-                d1=d1,
-                d2=d2,
-                side_samples=cfg.viz_side_samples,
-                batch_size=cfg.eval_batch_size,
-                lo=cfg.input_lo,
-                hi=cfg.input_hi,
-            )
-        return torch.tensor(raw_render[np.newaxis, :, :]).float()
+    viz_fn = (
+        viz.get_student_teacher_viz_clf
+        if cfg.for_classification
+        else viz.get_student_teacher_viz_reg
+    )
 
-    imgs: list[wandb.Image] = []
-    n_viz_dims = min(cfg.n_viz_dims, cfg.input_dim)
-    for d1 in range(n_viz_dims):
-        for d2 in range(d1 + 1, n_viz_dims):
-            student_render = get_render(student_net, d1=d1, d2=d2)
-            teacher_render = get_render(teacher_net, d1=d1, d2=d2)
-
-            mean = teacher_render.mean()
-            std = torch.std(teacher_render) + 1e-6
-
-            student_render = ((student_render - mean) / std).sigmoid()
-            teacher_render = ((teacher_render - mean) / std).sigmoid()
-
-            combined_render: np.ndarray = (
-                torchvision.utils.make_grid(
-                    [student_render, teacher_render], nrow=2, ncol=1
-                )
-                .cpu()
-                .numpy()
-            )[0]
-            assert combined_render.ndim == 2
-
-            combined_img = PIL.Image.fromarray(np.uint8(combined_render * 255))
-
-            imgs.append(
-                wandb.Image(
-                    combined_img,
-                    caption=f"Student (left), Teacher (right); h={d1} w={d2}",
-                )
-            )
-
-    return imgs
+    return viz_fn(
+        student_net=student_net,
+        teacher_net=teacher_net,
+        n_viz_dims=cfg.n_viz_dims,
+        viz_side_samples=cfg.viz_side_samples,
+        input_lo=cfg.input_lo,
+        input_hi=cfg.input_hi,
+        od_value=cfg.viz_od_value,
+        precision_context=cfg.precision_context(student_net),
+        batch_size=cfg.eval_batch_size,
+    )
 
 
 @dataclasses.dataclass
 class BatchOutput:
     size: int
 
-    mse: float
-    rmse: float
-
     loss: torch.Tensor
+
+    # For regression
+    mse: Optional[float] = None
+    rmse: Optional[float] = None
+
+    # For classification
+    acc: Optional[float] = None
+    xent: Optional[float] = None
 
 
 def process_batch(
@@ -289,17 +277,29 @@ def process_batch(
 
     with cfg.precision_context(net):
         with torch.no_grad():
-            teacher_preds = teacher_net(xs)
+            teacher_preds: torch.Tensor = teacher_net(xs)
 
-    mse = F.mse_loss(input=preds, target=teacher_preds)
-    rmse = torch.sqrt(mse)
+    if cfg.for_classification:
+        teacher_labs = teacher_preds.argmax(dim=-1)
+        xent = F.cross_entropy(input=preds, target=teacher_labs)
+        acc = (preds.argmax(dim=-1) == teacher_labs).float().mean()
 
-    return BatchOutput(
-        size=xs.shape[0],
-        mse=mse.item(),
-        rmse=rmse.item(),
-        loss=mse,
-    )
+        return BatchOutput(
+            size=xs.shape[0],
+            xent=xent.item(),
+            acc=acc.item(),
+            loss=xent,
+        )
+    else:
+        mse = F.mse_loss(input=preds, target=teacher_preds)
+        rmse = torch.sqrt(mse)
+
+        return BatchOutput(
+            size=xs.shape[0],
+            mse=mse.item(),
+            rmse=rmse.item(),
+            loss=mse,
+        )
 
 
 def evaluate(
@@ -307,12 +307,15 @@ def evaluate(
     teacher_net: FCNet,
     loader: LoaderT,
     cfg: ExperimentConfig,
-) -> tuple[dict[str, Metric[float]], list[wandb.Image]]:
+) -> dict[str, Metric[float]]:
     assert isinstance(loader, FastTensorDataLoader)
     n: int = loader.dataset_len
 
     tot_loss: float = 0
+
     tot_se: float = 0
+    tot_xent: float = 0
+    tot_acc: float = 0
 
     xs: torch.Tensor
     with tqdm(total=len(loader)) as pbar:
@@ -326,17 +329,28 @@ def evaluate(
                 )
 
             tot_loss += bo.loss.item() * bo.size
-            tot_se += bo.mse * bo.size
+
+            if cfg.for_classification:
+                assert bo.xent is not None
+                assert bo.acc is not None
+                tot_xent += bo.xent * bo.size
+                tot_acc += bo.acc * bo.size
+            else:
+                assert bo.mse is not None
+                tot_se += bo.mse * bo.size
 
             pbar.update(1)
 
-    return (
+    return dict(loss=Metric(tot_loss / n, "min")) | (
         dict(
-            loss=Metric(tot_loss / n, "min"),
+            xent=Metric(tot_xent / n, "min"),
+            acc=Metric(tot_acc / n, "max"),
+        )
+        if cfg.for_classification
+        else dict(
             mse=Metric(tot_se / n, "min"),
             rmse=Metric(np.sqrt(tot_se / n), "min"),
-        ),
-        get_imgs_to_log(student_net=net, teacher_net=teacher_net, cfg=cfg),
+        )
     )
 
 
@@ -363,13 +377,16 @@ def train(
     n_steps: int = 0
     n_epochs: int = 0
     min_val_loss: float = np.inf
+    last_viz_train_loss: float = np.inf
     with tqdm() as pbar:
         while True:  # Termination will be handled outside
             xs: torch.Tensor
             for (xs,) in loader_train:
                 cur_lr: float = optimizer.param_groups[0]["lr"]
                 if cur_lr < cfg.min_lr:
-                    print("Validation loss has stopped improving. Stopping training...")
+                    print(
+                        "Validation loss has stopped improving. Stopping training..."
+                    )
                     return
 
                 bo = process_batch(
@@ -387,13 +404,13 @@ def train(
                 n_steps += 1
                 pbar.update(1)
                 pbar.set_description(
-                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; rmse={bo.rmse:.6e}; lr={cur_lr:6e}"
+                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; lr={cur_lr:6e}"
                 )
 
                 log_dict: dict[str, Metric] = dict()
                 if n_steps % cfg.steps_per_eval == 1:
                     net.eval()
-                    val_dict, val_imgs = evaluate(
+                    val_dict = evaluate(
                         net=net,
                         teacher_net=teacher_net,
                         loader=loader_val,
@@ -409,7 +426,18 @@ def train(
                         utils.save_model(net, model_name="student")
 
                     log_dict |= utils.tag_dict(val_dict, prefix=f"val_")
-                    log_dict["val_imgs"] = Metric(val_imgs)
+
+                if (
+                    bo.loss.item()
+                    < cfg.viz_loss_decrease_thresh * last_viz_train_loss
+                ):
+                    print("Visualizing the student and teacher!")
+                    last_viz_train_loss = bo.loss.item()
+                    log_dict["train_viz"] = Metric(
+                        get_imgs_to_log(
+                            student_net=net, teacher_net=teacher_net, cfg=cfg
+                        )
+                    )
 
                 if len(log_dict) > 0 or n_steps % cfg.log_freq_in_steps == 0:
                     utils.wandb_log(
@@ -418,8 +446,17 @@ def train(
                             epoch=Metric(n_epochs),
                             lr=Metric(cur_lr),
                             train_loss=Metric(bo.loss.item(), "min"),
-                            train_mse=Metric(bo.mse, "min"),
-                            train_rmse=Metric(bo.rmse, "min"),
+                        )
+                        | (
+                            dict(
+                                train_xent=Metric(bo.xent, "min"),
+                                train_acc=Metric(bo.acc, "max"),
+                            )
+                            if cfg.for_classification
+                            else dict(
+                                train_mse=Metric(bo.mse, "min"),
+                                train_rmse=Metric(bo.rmse, "min"),
+                            )
                         )
                         | log_dict
                     )
@@ -446,22 +483,29 @@ def run_experiment(cfg: ExperimentConfig):
         print("Training interrupted!")
 
     utils.load_model(net, model_name="student")
-
-    loader_test = cfg.get_loader_test()
     net.eval()
+    utils.wandb_log(
+        {
+            "final_viz": Metric(
+                get_imgs_to_log(
+                    student_net=net, teacher_net=teacher_net, cfg=cfg
+                )
+            )
+        }
+    )
+
     print(f"Starting evaluation of test split...")
-    test_dict, test_imgs = evaluate(
+    loader_test = cfg.get_loader_test()
+
+    test_dict = evaluate(
         net=net,
         loader=loader_test,
         cfg=cfg,
         teacher_net=teacher_net,
     )
-
-    utils.wandb_log({f"test_imgs": Metric(test_imgs)})
     test_metrics = utils.tag_dict(test_dict, prefix=f"test_")
     for name, metric in test_metrics.items():
         wandb.run.summary[name] = metric.data  # type: ignore
-
     print(f"Finished evaluation of test split.")
 
 

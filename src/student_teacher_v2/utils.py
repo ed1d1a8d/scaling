@@ -3,8 +3,6 @@ import os
 import warnings
 from typing import Callable, Generic, Optional, TypeVar
 
-import einops
-import numpy as np
 import torch
 import wandb
 from torch import nn
@@ -36,26 +34,6 @@ def batch_execute(
         outs.append(fn(batch_xs))
 
     return torch.cat(outs)
-
-
-def render_2d_image(
-    fn: Callable[[np.ndarray], np.ndarray],
-    side_samples: int,
-    lo: float,
-    hi: float,
-) -> np.ndarray:
-    """Should only be called on a pred_fn that takes 2d inputs."""
-    s = slice(0, 1, 1j * side_samples)
-
-    XY = einops.rearrange(
-        np.mgrid[s, s] * (hi - lo) + lo, "d h w -> h w d", d=2
-    )
-    assert XY.shape == (side_samples, side_samples, 2)
-
-    zs = fn(XY.reshape(-1, 2))
-    assert zs.shape == (side_samples**2, 1)
-
-    return zs.reshape(side_samples, side_samples)
 
 
 def save_model(model: nn.Module, model_name: str):
