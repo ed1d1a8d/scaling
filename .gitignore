@@ -20,3 +20,5 @@ checkpoints
 # data files
 *.npz
 *.beton
+*ubyte
+test10*
