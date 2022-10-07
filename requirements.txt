@@ -23,6 +23,11 @@ numba
 # Adversarial example things
 torchattacks
 
+# CLIP
+ftfy
+regex
+git+https://github.com/openai/CLIP.git
+
 # Other deep learning libraries
 einops
 mup
