@@ -19,7 +19,7 @@ from src.ax.attack import AllPairsPGD
 from src.ax.attack.FastAutoAttack import FastAutoAttack
 from src.ax.attack.FastPGD import FastPGD
 from src.ax.attack.teacher_loss import TeacherCrossEntropy
-from src.ax.data import cifar, synthetic
+from src.ax.data import cifar, mnist, synthetic
 from src.ax.models import vit, wrn
 from torch import nn
 from tqdm.auto import tqdm
@@ -48,6 +48,7 @@ class ModelT(enum.Enum):
 class DatasetT(enum.Enum):
     CIFAR10 = enum.auto()
     CIFAR5m = enum.auto()
+    MNIST20m = enum.auto()
     LightDark = enum.auto()
     HVStripe = enum.auto()
     SquareCircle = enum.auto()
@@ -141,17 +142,25 @@ class ExperimentConfig:
     def data_mean(self):
         if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
             return wrn.CIFAR10_MEAN
+        if self.dataset is DatasetT.MNIST20m:
+            return (0.5,)
         return (0.0, 0.0, 0.0)
 
     @property
     def data_std(self):
         if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
             return wrn.CIFAR10_STD
+        if self.dataset is DatasetT.MNIST20m:
+            return (1.0,)
         return (1.0, 1.0, 1.0)
 
     @property
     def num_classes(self):
-        if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+        if self.dataset in (
+            DatasetT.CIFAR5m,
+            DatasetT.CIFAR10,
+            DatasetT.MNIST20m,
+        ):
             return 10
         if self.dataset in (
             DatasetT.LightDark,
@@ -159,6 +168,15 @@ class ExperimentConfig:
             DatasetT.SquareCircle,
         ):
             return 2
+
+        raise ValueError(self.dataset)
+
+    @property
+    def n_channels(self) -> int:
+        if self.dataset in (DatasetT.CIFAR5m, DatasetT.CIFAR10):
+            return 3
+        if self.dataset is DatasetT.MNIST20m:
+            return 1
 
         raise ValueError(self.dataset)
 
@@ -202,6 +220,17 @@ class ExperimentConfig:
                 num_workers=self.num_workers,
             )
 
+        if self.dataset is DatasetT.MNIST20m:
+            return mnist.get_loader(
+                orig=False,
+                split="train",
+                batch_size=self.batch_size,
+                indices=range(self.n_train),
+                random_order=True,
+                seed=self.seed,
+                num_workers=self.num_workers,
+            )
+
         if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
@@ -224,6 +253,14 @@ class ExperimentConfig:
                 split="test-orig",
                 batch_size=self.eval_batch_size,
                 indices=range(5000),
+            )
+
+        if self.dataset is DatasetT.MNIST20m:
+            return mnist.get_loader(
+                orig=False,
+                split="val",
+                batch_size=self.batch_size,
+                num_workers=self.num_workers,
             )
 
         if self.dataset in (
@@ -271,6 +308,24 @@ class ExperimentConfig:
                 ),
             }
 
+        if self.dataset is DatasetT.MNIST20m:
+            return {
+                "test_orig": mnist.get_loader(
+                    orig=True,
+                    split="test",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
+                    num_workers=self.num_workers,
+                ),
+                "test": mnist.get_loader(
+                    orig=False,
+                    split="test",
+                    batch_size=self.eval_batch_size,
+                    indices=None if self.n_test is None else range(self.n_test),
+                    num_workers=self.num_workers,
+                ),
+            }
+
         if self.dataset in (
             DatasetT.LightDark,
             DatasetT.HVStripe,
@@ -293,9 +348,11 @@ class ExperimentConfig:
                 num_classes=self.num_classes,
                 mean=self.data_mean,
                 std=self.data_std,
+                num_input_channels=self.n_channels,
             )
 
         if self.model is ModelT.VisionTransformer:
+            assert self.n_channels == 3
             return vit.get_mup_vit(
                 img_size=32,
                 num_input_channels=3,
@@ -398,6 +455,11 @@ class ExperimentConfig:
             raise ValueError(self.student_teacher_attack)
 
         return attack_train, attack_val, attack_test
+
+    def cls_name(self, idx: int) -> str:
+        if self.dataset is DatasetT.MNIST20m:
+            return mnist.cls_name(idx)
+        return cifar.cls_name(idx)
 
 
 @dataclasses.dataclass
@@ -540,10 +602,10 @@ def get_imgs_to_log(
     imgs_diff = (bo.imgs_adv - bo.imgs_nat) / adv_eps / (2 + 1e-9) + 0.5
 
     def get_caption(i: int) -> str:
-        lab_nat = cifar.cls_name(int(bo.labs_nat[i].item()))
-        lab_adv = cifar.cls_name(int(bo.labs_adv[i].item()))
-        pred_nat = cifar.cls_name(int(bo.preds_nat[i].item()))
-        pred_adv = cifar.cls_name(int(bo.preds_adv[i].item()))
+        lab_nat = cfg.cls_name(int(bo.labs_nat[i].item()))
+        lab_adv = cfg.cls_name(int(bo.labs_adv[i].item()))
+        pred_nat = cfg.cls_name(int(bo.preds_nat[i].item()))
+        pred_adv = cfg.cls_name(int(bo.preds_adv[i].item()))
         return "\n".join(
             [
                 f"preds: {pred_nat}, {pred_adv}; true: ({lab_nat}, {lab_adv})",
