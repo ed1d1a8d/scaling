@@ -9,17 +9,16 @@
 # 4. Run this script (make sure the filenames variable below matches the filenames you generated in step 2)
 
 import os
-import sys
 
 import git.repo
 import numpy as np
-from array import array
-import struct
-from mlxtend.data import loadlocal_mnist
 from ffcv.fields import IntField, NDArrayField
 from ffcv.writer import DatasetWriter
+from mlxtend.data import loadlocal_mnist
 
-GIT_ROOT = str(git.repo.Repo(".", search_parent_directories=True).working_tree_dir)
+GIT_ROOT = str(
+    git.repo.Repo(".", search_parent_directories=True).working_tree_dir
+)
 
 
 class NumpyDataset:
@@ -48,7 +47,9 @@ def get_mnist_datasets(
     )
     print("Loaded test files")
 
-    xs, ys = loadlocal_mnist(images_path=xs_train_file, labels_path=ys_train_file)
+    xs, ys = loadlocal_mnist(
+        images_path=xs_train_file, labels_path=ys_train_file
+    )
     print("Loaded train files")
 
     xs_train, ys_train = (xs[:-n_val], ys[:-n_val])
