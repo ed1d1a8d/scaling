@@ -8,8 +8,20 @@ import git.repo
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, CIFAR100, StanfordCars
 from tqdm import tqdm
+from simple_parsing import ArgumentParser
+import dataclasses
+
+@dataclasses.dataclass
+class Config:
+    dataset: str = "CIFAR10"
+
+# Parse config
+parser = ArgumentParser()
+parser.add_arguments(Config, dest="experiment_config")
+args = parser.parse_args()
+cfg: Config = args.experiment_config
 
 GIT_ROOT = pathlib.Path(
     str(git.repo.Repo(".", search_parent_directories=True).working_tree_dir)
@@ -22,8 +34,15 @@ model, preprocess = clip.load("ViT-L/14", device)
 # Load the dataset
 # TODO: Handle more datasets besides CIFAR10
 root = os.path.expanduser("/var/tmp/scratch")
-train = CIFAR10(root, download=True, train=True, transform=preprocess)
-test = CIFAR10(root, download=True, train=False, transform=preprocess)
+if cfg.dataset == "CIFAR10":
+    train = CIFAR10(root, download=True, train=True, transform=preprocess)
+    test = CIFAR10(root, download=True, train=False, transform=preprocess)
+elif cfg.dataset == "CIFAR100":
+    train = CIFAR100(root, download=True, train=True, transform=preprocess)
+    test = CIFAR100(root, download=True, train=False, transform=preprocess)
+elif cfg.dataset == "StanfordCars":
+    train = CIFAR100(root, download=True, train=True, transform=preprocess)
+    test = CIFAR100(root, download=True, train=False, transform=preprocess)
 
 
 def get_features(dataset):
@@ -48,7 +67,7 @@ xs_train, ys_train = get_features(train)
 xs_test, ys_test = get_features(test)
 
 np.savez(
-    GIT_ROOT / "data/clip-embeddings/cifar10_clip.npz",
+    os.path.join(GIT_ROOT, "data/clip-embeddings/" + cfg.dataset + "_clip.npz"),
     xs_train=xs_train,
     ys_train=ys_train,
     xs_test=xs_test,
