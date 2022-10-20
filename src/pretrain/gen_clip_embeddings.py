@@ -1,5 +1,6 @@
 """Code adapted from https://github.com/openai/CLIP"""
 
+import dataclasses
 import os
 import pathlib
 
@@ -7,15 +8,16 @@ import clip
 import git.repo
 import numpy as np
 import torch
+from simple_parsing import ArgumentParser
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10, CIFAR100, StanfordCars
 from tqdm import tqdm
-from simple_parsing import ArgumentParser
-import dataclasses
+
 
 @dataclasses.dataclass
 class Config:
     dataset: str = "CIFAR10"
+
 
 # Parse config
 parser = ArgumentParser()
@@ -41,8 +43,8 @@ elif cfg.dataset == "CIFAR100":
     train = CIFAR100(root, download=True, train=True, transform=preprocess)
     test = CIFAR100(root, download=True, train=False, transform=preprocess)
 elif cfg.dataset == "StanfordCars":
-    train = CIFAR100(root, download=True, train=True, transform=preprocess)
-    test = CIFAR100(root, download=True, train=False, transform=preprocess)
+    train = StanfordCars(root, download=True, split="train", transform=preprocess)
+    test = StanfordCars(root, download=True, split="test", transform=preprocess)
 
 
 def get_features(dataset):
