@@ -73,7 +73,7 @@ class ExperimentConfig:
 
     # eval params
     eval_batch_size: int = 512
-    samples_per_eval: int = 50000  # (51200) aka epoch size
+    samples_per_eval: int = 25000  # aka epoch size
     n_imgs_to_log_per_eval: int = 15
 
     # Testing params
