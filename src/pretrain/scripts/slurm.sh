@@ -10,7 +10,7 @@
 sbatch <<EOT
 #!/bin/bash
 # Slurm sbatch options
-#SBATCH -o slurm-logs/ax/log-%j
+#SBATCH -o slurm-logs/pretrain/log-%j
 #SBATCH -c 20
 #SBATCH --gres=gpu:volta:1
 
