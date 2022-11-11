@@ -43,6 +43,9 @@ dacite
 # ThunderSVM
 /home/gridsan/groups/ccg/programs/thundersvm/python; sys_platform != 'darwin'
 
+# UMAP
+umap-learn
+
 # Other computational libraries
 matplotlib
 pandas
