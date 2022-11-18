@@ -13,6 +13,8 @@ class Dataset:
     xs_test: np.ndarray
     ys_test: np.ndarray
 
+    name: str = "unnamed"
+
 
 def get_min_xent(
     probs_train: np.ndarray,

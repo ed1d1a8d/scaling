@@ -49,6 +49,7 @@ umap-learn
 # Other computational libraries
 matplotlib
 pandas
+plotly
 
 # Experiment management
 wandb
