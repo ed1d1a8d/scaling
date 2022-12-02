@@ -15,6 +15,7 @@ class EmbeddingDataset:
 
     dataset_id: str
     embedder_id: str
+    n_embedder_params: int = 0
 
     def save_to_file(self, path: str):
         with open(path, "wb") as f:

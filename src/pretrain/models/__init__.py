@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
+from typing import Optional
 
+import PIL.Image
 import torch
 from torch import nn
 
@@ -12,6 +14,10 @@ class BaseEmbedderConfig(ABC):
     """Base class for embedder configurations."""
 
     id: str
+
+    # Can set to "/home/gridsan/groups/ccg/models/huggingface/hub"
+    # for already downloaded things
+    cache_dir: Optional[str] = None
 
     def __post_init__(self):
         assert self.id in self.valid_model_ids
@@ -42,7 +48,7 @@ class BaseEmbedder(ABC, nn.Module):
         raise NotImplementedError
 
     @abstractmethod
-    def preprocess(self, xs: torch.Tensor) -> torch.Tensor:
+    def preprocess(self, img: PIL.Image.Image) -> torch.Tensor:
         raise NotImplementedError
 
     @abstractmethod

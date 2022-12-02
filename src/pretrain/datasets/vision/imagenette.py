@@ -14,8 +14,9 @@ WARNING: We load Imagenette via huggingface datasets. In order to use
 """
 
 import dataclasses
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
+import torch
 import torch.utils.data
 from datasets.load import load_dataset
 
@@ -40,24 +41,53 @@ class Imagenette(BaseDatasetConfig):
             "parachute",
         )
 
+    def parse_batch(self, batch: Any) -> tuple[torch.Tensor, torch.Tensor]:
+        return batch["image"], batch["label"]
+
     def get_train_ds(
         self, transform: Optional[Callable] = None
     ) -> torch.utils.data.Dataset:
-        return load_dataset(
+        ds = load_dataset(
             "frgfm/imagenette",
             "320px",
             split="train",
-        ).set_transform(  # type: ignore
-            transform
         )
 
+        ds.set_transform(  # type: ignore
+            lambda d: d
+            | (
+                {}
+                if transform is None
+                else {
+                    "image": transform(d["image"][0]).unsqueeze(
+                        0
+                    ),  # We unsqueeze to account for pytorch collation.
+                }
+            )
+        )
+
+        return ds  # type: ignore
+
     def get_test_ds(
-        self, transform: Optional[Callable] = None,
+        self, transform: Optional[Callable] = None
     ) -> torch.utils.data.Dataset:
-        return load_dataset(
+        ds = load_dataset(
             "frgfm/imagenette",
             "320px",
             split="validation",
-        ).set_transform(  # type: ignore
-            transform
         )
+
+        ds.set_transform(  # type: ignore
+            lambda d: d
+            | (
+                {}
+                if transform is None
+                else {
+                    "image": transform(d["image"][0]).unsqueeze(
+                        0
+                    ),  # We unsqueeze to account for pytorch collation.
+                }
+            )
+        )
+
+        return ds  # type: ignore

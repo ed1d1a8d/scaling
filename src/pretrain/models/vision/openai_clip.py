@@ -5,6 +5,7 @@ from typing import Callable
 
 import clip
 import clip.model
+import PIL.Image
 import torch
 
 from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
@@ -40,7 +41,7 @@ class OpenaiClip(BaseEmbedder):
         self.cfg = cfg
 
         self.clip: clip.model.CLIP
-        self.preprocesser: Callable[[torch.Tensor], torch.Tensor]
+        self.preprocesser: Callable
         self.clip, self.preprocesser = clip.load(cfg.model_id)
 
     @property
@@ -55,8 +56,8 @@ class OpenaiClip(BaseEmbedder):
     def n_embedder_params(self) -> int:
         return sum(p.numel() for p in self.clip.visual.parameters())
 
-    def preprocess(self, xs: torch.Tensor) -> torch.Tensor:
-        return self.preprocesser(xs)
+    def preprocess(self, img: PIL.Image.Image) -> torch.Tensor:
+        return self.preprocesser(img)
 
     def get_embeddings(self, xs: torch.Tensor) -> torch.Tensor:
         return self.clip.encode_image(xs)
