@@ -20,9 +20,9 @@ ray==1.13.0
 ffcv
 numba
 
-# Pretrained models
+# Huggingface
 transformers
-datasets
+datasets[vision]
 
 # Adversarial example things
 torchattacks
