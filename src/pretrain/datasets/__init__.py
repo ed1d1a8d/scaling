@@ -1,7 +1,8 @@
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
+import torch
 import torch.utils.data
 
 
@@ -27,6 +28,10 @@ class BaseDatasetConfig(ABC):
     @property
     def n_classes(self) -> int:
         return len(self.class_names)
+
+    def parse_batch(self, batch: Any) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns a tuple of (xs, ys)."""
+        return batch
 
     @abstractmethod
     def get_train_ds(

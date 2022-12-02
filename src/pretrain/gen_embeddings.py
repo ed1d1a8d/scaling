@@ -59,7 +59,8 @@ def embed_dataset(
     embeddings_list: list[np.ndarray] = []
     ys_list: list[np.ndarray] = []
     with torch.no_grad():
-        for xs_batch, ys_batch in tqdm(dl):
+        for batch in tqdm(dl):
+            xs_batch, ys_batch = cfg.dataset_cfg.parse_batch(batch)
             embeddings_batch = embedder.get_embeddings(xs_batch.cuda())
 
             embeddings_list.append(embeddings_batch.cpu().numpy())
@@ -94,6 +95,7 @@ def main(cfg: Config):
         ys_test=ys_test,
         dataset_id=cfg.dataset_cfg.id,
         embedder_id=cfg.embedder_cfg.id,
+        n_embedder_params=embedder.n_embedder_params,
     )
 
     # Create cfg.save_dir / cfg.dataset_cfg.id

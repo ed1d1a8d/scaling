@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 
+import PIL.Image
 import torch
 from transformers import AutoFeatureExtractor, BeitForImageClassification
 from transformers.models.beit.modeling_beit import BeitModel
@@ -17,22 +18,22 @@ class MsftBeitConfig(BaseEmbedderConfig):
 
     @property
     def hf_model_id(self) -> str:
-        return "/".join(id.split("/")[1:])
+        return "/".join(self.id.split("/")[1:])
 
     @property
     def valid_model_ids(self) -> tuple[str, ...]:
         return (
-            "microsoft/beit-base-finetuned-ade-640-640",
-            "microsoft/beit-base-patch16-224-pt22k-ft22k",
-            "microsoft/beit-base-patch16-224-pt22k",
-            "microsoft/beit-base-patch16-224",
-            "microsoft/beit-base-patch16-384",
-            "microsoft/beit-large-finetuned-ade-640-640",
-            "microsoft/beit-large-patch16-224-pt22k-ft22k",
-            "microsoft/beit-large-patch16-224-pt22k",
-            "microsoft/beit-large-patch16-224",
-            "microsoft/beit-large-patch16-384",
-            "microsoft/beit-large-patch16-512",
+            "hf/microsoft/beit-base-finetuned-ade-640-640",
+            "hf/microsoft/beit-base-patch16-224-pt22k-ft22k",
+            "hf/microsoft/beit-base-patch16-224-pt22k",
+            "hf/microsoft/beit-base-patch16-224",
+            "hf/microsoft/beit-base-patch16-384",
+            "hf/microsoft/beit-large-finetuned-ade-640-640",
+            "hf/microsoft/beit-large-patch16-224-pt22k-ft22k",
+            "hf/microsoft/beit-large-patch16-224-pt22k",
+            "hf/microsoft/beit-large-patch16-224",
+            "hf/microsoft/beit-large-patch16-384",
+            "hf/microsoft/beit-large-patch16-512",
         )
 
     def get_model(self) -> MsftBeit:
@@ -50,14 +51,18 @@ class MsftBeit(BaseEmbedder):
 
         self.beit: BeitModel = BeitForImageClassification.from_pretrained(  # type: ignore
             cfg.hf_model_id,
+            cache_dir=cfg.cache_dir,
         ).beit  # type: ignore
 
-        self.extractor = AutoFeatureExtractor.from_pretrained(cfg.hf_model_id)
+        self.extractor = AutoFeatureExtractor.from_pretrained(
+            cfg.hf_model_id,
+            cache_dir=cfg.cache_dir,
+        )
 
         with torch.no_grad():
-            self.sample_input = self.preprocess(torch.zeros(1, 10, 10, 3))
+            self.sample_input = self.preprocess([torch.zeros(10, 10, 3)])  # type: ignore
             self._embed_dim: int = self.beit.forward(
-                pixel_values=self.sample_input
+                pixel_values=self.sample_input.unsqueeze(0)
             ).pooler_output.shape[  # type: ignore
                 -1
             ]
@@ -74,14 +79,14 @@ class MsftBeit(BaseEmbedder):
     def n_embedder_params(self) -> int:
         return sum(p.numel() for p in self.beit.parameters())
 
-    def preprocess(self, xs: torch.Tensor) -> torch.Tensor:
+    def preprocess(self, img: PIL.Image.Image) -> torch.Tensor:
         d = self.extractor(
-            images=[x for x in xs],
+            images=img,
             return_tensors="pt",
             batched=True,
         )  # type: ignore
 
-        return d["pixel_values"]
+        return d["pixel_values"][0]
 
     def get_embeddings(self, xs: torch.Tensor) -> torch.Tensor:
-        return self.beit(xs).pooler_output  # type: ignore
+        return self.beit(pixel_values=xs).pooler_output  # type: ignore
