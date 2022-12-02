@@ -3,17 +3,7 @@ import scipy.optimize
 import scipy.special
 import sklearn.linear_model
 
-import dataclasses
-
-
-@dataclasses.dataclass
-class Dataset:
-    xs_train: np.ndarray
-    ys_train: np.ndarray
-    xs_test: np.ndarray
-    ys_test: np.ndarray
-
-    name: str = "unnamed"
+from src.pretrain.probes import EmbeddingDataset
 
 
 def get_min_xent(
@@ -43,7 +33,7 @@ def get_min_xent(
 
 
 def run_experiment(
-    ds: Dataset,
+    ds: EmbeddingDataset,
     n_train: int,
     n_classes: int,
     C: float,
