@@ -22,6 +22,7 @@ class LaionClipConfig(BaseEmbedderConfig):
 
     @property
     def valid_model_ids(self) -> tuple[str, ...]:
+        # The commented out models don't work as of 2022-12-01.
         return (
             "hf/laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
             # "hf/laion/CLIP-ViT-B-32-roberta-base-laion2B-s12B-b32k",
@@ -56,7 +57,7 @@ class LaionClip(BaseEmbedder):
         self.preprocesser: transformers.AutoProcessor
         self.preprocesser = transformers.AutoProcessor.from_pretrained(
             cfg.hf_model_id,
-            cache_dir = cfg.cache_dir,
+            cache_dir=cfg.cache_dir,
         )  # type: ignore
 
     @property

@@ -26,5 +26,3 @@ class EmbeddingDataset:
         with open(path, "rb") as f:
             dict_ = pickle.load(f)
         return cls(**dict_)
-
-    
