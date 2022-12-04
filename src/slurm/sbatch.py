@@ -75,8 +75,8 @@ echo "End time: $(date)"
 def launch_single_experiment(
     command: str,
     log_dir: str,
-    n_gpus: int = 1,
-    n_cpus: int = 20,
+    n_gpus: int,
+    n_cpus: int,
 ) -> None:
     full_log_dir = os.path.abspath(
         os.path.expanduser(f"~/slurm-logs/scaling/{log_dir}")
@@ -89,7 +89,7 @@ def launch_single_experiment(
     sbatch_input = SBATCH_TEMPLATE.format(
         EXPERIMENT_CMD=command,
         LOG_DIR=full_log_dir,
-        GPU_STR=f"#SBATCH --gres=gpu:{n_gpus}"
+        GPU_STR=f"#SBATCH --gres=gpu:volta:{n_gpus}"
         if n_gpus > 0
         else "# No gpus requested",
         N_GPUS=n_gpus,
@@ -111,8 +111,8 @@ def launch_parallel_experiments(
     commands: Sequence[str],
     max_concurrent: int,
     log_dir: str,
-    n_gpus: int = 1,
-    n_cpus: int = 20,
+    n_gpus: int,
+    n_cpus: int,
 ) -> None:
     command = f"\nwaitUntilNJobsRemain {max_concurrent}\n".join(
         "{ " + c + "; } &" for c in commands
@@ -131,8 +131,8 @@ def launch_sharded_experiments(
     max_concurrent: int,
     n_nodes: int,
     log_dir: str,
-    n_gpus: int = 1,
-    n_cups: int = 20,
+    n_gpus: int,
+    n_cpus: int,
 ) -> None:
     """
     Experiments run on n_nodes nodes.
@@ -149,5 +149,17 @@ def launch_sharded_experiments(
             max_concurrent=max_concurrent,
             log_dir=log_dir,
             n_gpus=n_gpus,
-            n_cpus=n_cups,
+            n_cpus=n_cpus,
         )
+
+
+if __name__ == "__main__":
+    # Example usage
+    launch_sharded_experiments(
+        commands=[f"echo {x}" for x in range(20)],
+        max_concurrent=3,
+        n_nodes=2,
+        log_dir="test",
+        n_gpus=1,
+        n_cpus=2,
+    )

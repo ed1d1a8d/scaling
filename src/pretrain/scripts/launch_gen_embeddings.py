@@ -17,9 +17,12 @@ from src.slurm import sbatch
 
 @dataclasses.dataclass
 class Config:
+    batch_size: int = 32
+    n_gpus: int = 1
+    n_cpus: int = 20
+
     n_nodes: int = 10
     max_concurrent: int = 1
-    batch_size: int = 32
     log_dir: str = "gen_embeddings"
 
     dry_run: bool = False
@@ -80,6 +83,8 @@ def main(cfg: Config):
             n_nodes=cfg.n_nodes,
             max_concurrent=cfg.max_concurrent,
             log_dir=cfg.log_dir,
+            n_gpus=cfg.n_gpus,
+            n_cpus=cfg.n_cpus,
         )
 
 
