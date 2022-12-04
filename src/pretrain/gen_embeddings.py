@@ -39,9 +39,17 @@ class Config:
     )
 
     batch_size: int = 128
-    num_workers: int = 4
+    num_workers: int = 12
 
     save_dir: str = "/home/gridsan/groups/ccg/data/scaling/embeddings"
+
+    @property
+    def full_save_path(self) -> str:
+        return os.path.join(
+            self.save_dir,
+            self.dataset_cfg.id,
+            self.embedder_cfg.id.replace("/", "--") + ".pkl",
+        )
 
 
 def embed_dataset(
@@ -105,12 +113,7 @@ def main(cfg: Config):
     )
 
     print("Saving embeddings...")
-    file_path = os.path.join(
-        cfg.save_dir,
-        cfg.dataset_cfg.id,
-        cfg.embedder_cfg.id.replace("/", "--") + ".pkl",
-    )
-    embedding_ds.save_to_file(file_path)
+    embedding_ds.save_to_file(cfg.full_save_path)
 
 
 if __name__ == "__main__":

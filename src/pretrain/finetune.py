@@ -204,8 +204,8 @@ class ExperimentConfig:
             return torch.optim.Adam(
                 net.parameters(),
                 lr=self.lr,
-                betas=(0.9,0.98), # From CLIP paper
-                eps=1e-6, # From CLIP paper
+                betas=(0.9, 0.98),  # From CLIP paper
+                eps=1e-6,  # From CLIP paper
                 weight_decay=self.weight_decay,
             )
 
@@ -215,8 +215,6 @@ class ExperimentConfig:
                 lr=self.lr,
                 weight_decay=self.weight_decay,
             )
-
-
 
         raise ValueError(self.optimizer)
 
@@ -267,6 +265,7 @@ def load_model(model: nn.Module):
     path: str = os.path.join(wandb.run.dir, "model.ckpt")  # type: ignore
     model.load_state_dict(torch.load(path))
     print("Loaded model checkpoint.")
+
 
 def delete_model_ckpt():
     path: str = os.path.join(wandb.run.dir, "model.ckpt")  # type: ignore

@@ -14,10 +14,7 @@ class BaseEmbedderConfig(ABC):
     """Base class for embedder configurations."""
 
     id: str
-
-    # Can set to "/home/gridsan/groups/ccg/models/huggingface/hub"
-    # for already downloaded things
-    cache_dir: Optional[str] = None
+    cache_dir: Optional[str] = "/home/gridsan/groups/ccg/huggingface/hub"
 
     def __post_init__(self):
         assert self.id in self.valid_model_ids

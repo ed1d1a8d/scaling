@@ -59,7 +59,7 @@ class CIFAR100(BaseDatasetConfig):
         )
 
     def get_test_ds(
-        self, transform: Optional[Callable] = None,
+        self, transform: Optional[Callable] = None
     ) -> torch.utils.data.Dataset:
         return torchvision.datasets.CIFAR100(
             root=self.data_dir,
