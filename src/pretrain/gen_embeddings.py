@@ -6,6 +6,7 @@ import os
 import numpy as np
 import torch
 import torch.utils.data
+import wandb
 from simple_parsing import ArgumentParser, subgroups
 from tqdm.auto import tqdm
 
@@ -42,6 +43,8 @@ class Config:
     num_workers: int = 12
 
     save_dir: str = "/home/gridsan/groups/ccg/data/scaling/embeddings"
+    wandb_dir: str = "/home/gridsan/groups/ccg"
+    tags: tuple[str, ...] = ("test",)
 
     @property
     def full_save_path(self) -> str:
@@ -122,6 +125,16 @@ if __name__ == "__main__":
     parser.add_arguments(Config, dest="config")
     args = parser.parse_args()
     cfg: Config = args.config
+
+    # Initialize wandb
+    wandb.init(
+        entity="data-frugal-learning",
+        project="gen-embeddings",
+        dir=cfg.wandb_dir,
+        tags=cfg.tags,
+        config=dataclasses.asdict(cfg),
+        save_code=True,
+    )
 
     # Run main logic
     main(cfg)

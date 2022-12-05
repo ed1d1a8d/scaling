@@ -16,6 +16,7 @@ WARNING: We load Imagenette via huggingface datasets. In order to use
 import dataclasses
 from typing import Any, Callable, Optional
 
+import PIL.Image
 import torch
 import torch.utils.data
 from datasets.load import load_dataset
@@ -44,6 +45,11 @@ class Imagenette(BaseDatasetConfig):
     def parse_batch(self, batch: Any) -> tuple[torch.Tensor, torch.Tensor]:
         return batch["image"], batch["label"]
 
+    def rgbify(self, image: PIL.Image.Image) -> PIL.Image.Image:
+        if image.mode == "RGB":
+            return image
+        return image.convert("RGB")
+
     def get_train_ds(
         self, transform: Optional[Callable] = None
     ) -> torch.utils.data.Dataset:
@@ -59,7 +65,7 @@ class Imagenette(BaseDatasetConfig):
                 {}
                 if transform is None
                 else {
-                    "image": transform(d["image"][0]).unsqueeze(
+                    "image": transform(self.rgbify(d["image"][0])).unsqueeze(
                         0
                     ),  # We unsqueeze to account for pytorch collation.
                 }
@@ -83,7 +89,7 @@ class Imagenette(BaseDatasetConfig):
                 {}
                 if transform is None
                 else {
-                    "image": transform(d["image"][0]).unsqueeze(
+                    "image": transform(self.rgbify(d["image"][0])).unsqueeze(
                         0
                     ),  # We unsqueeze to account for pytorch collation.
                 }
