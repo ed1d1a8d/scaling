@@ -26,6 +26,7 @@ class Config:
     log_dir: str = "gen_embeddings"
 
     dry_run: bool = False
+    tags: tuple[str, ...] = ("gen-embeddings-v1",)
 
 
 def main(cfg: Config):
@@ -69,6 +70,7 @@ def main(cfg: Config):
                         f"--embedder_cfg {embedder_key}",
                         f"--embedder_cfg.id {id}",
                         f"--batch_size {cfg.batch_size}",
+                        f"--tags {' '.join(cfg.tags)}",
                     ]
                 )
                 commands.append(command)

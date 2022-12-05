@@ -60,7 +60,7 @@ class MsftBeit(BaseEmbedder):
         )
 
         with torch.no_grad():
-            self.sample_input = self.preprocess([torch.zeros(10, 10, 3)])  # type: ignore
+            self.sample_input = self.preprocess(PIL.Image.new("RGB", (13, 19)))
             self._embed_dim: int = self.beit.forward(
                 pixel_values=self.sample_input.unsqueeze(0)
             ).pooler_output.shape[  # type: ignore
@@ -83,7 +83,6 @@ class MsftBeit(BaseEmbedder):
         d = self.extractor(
             images=img,
             return_tensors="pt",
-            batched=True,
         )  # type: ignore
 
         return d["pixel_values"][0]
