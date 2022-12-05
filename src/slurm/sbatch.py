@@ -26,14 +26,10 @@ echo "Running in directory: $(pwd)"
 echo "Start time: $(date)"
 echo
 
-# Load conda environment.
-# See https://github.com/conda/conda/issues/7980#issuecomment-441358406
-# for details on why we do it this way.
-source /state/partition1/llgrid/pkg/anaconda/anaconda3-2021b/etc/profile.d/conda.sh
-conda activate scaling-v2
-
-# Set up environment variables.
-export LD_LIBRARY_PATH=/home/gridsan/groups/ccg/envs/scaling-v2/lib
+# Setup conda-pack environment.
+source scripts/setup-env.sh -r scaling-v2
+source $DST_ENV_PATH/bin/activate
+export LD_LIBRARY_PATH=$DST_ENV_PATH/lib
 
 # Set up and launch proxy
 source scripts/rand-mallory.sh
@@ -41,7 +37,7 @@ source scripts/rand-mallory.sh
 sleep 10  # Wait for mallory to start
 
 # Set up Hugging Face cache that supports locking.
-export HF_HOME="/state/partition1/user/$USER/huggingface"
+export HF_HOME="/run/user/$UID/huggingface"
 export HF_DATASETS_CACHE="$HF_HOME/datasets"
 mkdir -p $HF_HOME
 mkdir -p $HF_DATASETS_CACHE
@@ -160,6 +156,6 @@ if __name__ == "__main__":
         max_concurrent=3,
         n_nodes=2,
         log_dir="test",
-        n_gpus=1,
+        n_gpus=0,
         n_cpus=2,
     )
