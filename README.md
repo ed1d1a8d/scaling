@@ -27,3 +27,8 @@ Run the command
 ```
 black --check src
 ```
+
+## Best practices
+- Any job that is submitted to slurm should probably be tracked with wandb.
+  This makes is much easier to keep track of jobs and debug jobs that crash
+  (since wandb logs things like memory usage).
