@@ -38,6 +38,7 @@ class CIFAR100(BaseDatasetConfig):
             "vehicles 2: lawn-mower, rocket, streetcar, tank, tractor",
         )
 
+    @property
     def class_names(self) -> tuple[str, ...]:
         return tuple(
             cn
