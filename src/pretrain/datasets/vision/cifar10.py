@@ -4,7 +4,7 @@ from typing import Callable, Optional
 import torch.utils.data
 import torchvision
 
-from src.pretrain.datasets import BaseDatasetConfig
+from src.pretrain.datasets.base import BaseDatasetConfig
 
 
 @dataclasses.dataclass

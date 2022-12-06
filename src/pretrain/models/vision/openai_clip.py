@@ -8,7 +8,7 @@ import clip.model
 import PIL.Image
 import torch
 
-from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
+from src.pretrain.models.base import BaseEmbedder, BaseEmbedderConfig
 
 
 @dataclasses.dataclass

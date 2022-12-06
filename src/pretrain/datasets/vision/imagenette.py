@@ -1,16 +1,11 @@
 """
 WARNING: We load Imagenette via huggingface datasets. In order to use
-         huggingface on supercloud, you need to soft link ~/.cache/huggingface
-         to a directory that supports locking.
+         huggingface on supercloud, you need to set $HF_HOME and
+         $HF_DATASETS_CACHE to a directory that supports locking.
 
-         It is recommended that you symlink to
-         /state/partition1/user/$USER/huggingface.
-
-         If launching from a slurm script, you should make sure that the
-         symlinked directory exists before running the code in this file.
-         This can be done by running the command:
-
-            mkdir -p /state/partition1/user/$USER/huggingface
+         It is recommended that you use the following values
+            export HF_HOME="/run/user/$UID/huggingface"
+            export HF_DATASETS_CACHE="$HF_HOME/datasets"
 """
 
 import dataclasses
@@ -21,7 +16,7 @@ import torch
 import torch.utils.data
 from datasets.load import load_dataset
 
-from src.pretrain.datasets import BaseDatasetConfig
+from src.pretrain.datasets.base import BaseDatasetConfig
 
 
 @dataclasses.dataclass

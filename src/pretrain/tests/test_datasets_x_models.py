@@ -7,10 +7,9 @@ import torch
 import torch.utils.data
 import transformers
 
-from src.pretrain.datasets import BaseDatasetConfig
-from src.pretrain.datasets.vision import cifar10, cifar100, imagenette, svhn
-from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
-from src.pretrain.models.vision import laion_clip, msft_beit, openai_clip
+from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
+from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
+from src.pretrain.models.base import BaseEmbedder
 
 
 def run_single_test(
@@ -41,18 +40,13 @@ def run_single_test(
 
 
 def main():
-    embedder_config_ts: list[Type[BaseEmbedderConfig]] = [
-        msft_beit.MsftBeitConfig,
-        laion_clip.LaionClipConfig,
-        openai_clip.OpenaiClipConfig,
-    ]
+    embedder_config_ts: tuple[Type[BaseEmbedderConfig]] = tuple(
+        get_embedder_index().values()
+    )
 
-    ds_config_ts: list[Type[BaseDatasetConfig]] = [
-        cifar10.CIFAR10,
-        cifar100.CIFAR100,
-        imagenette.Imagenette,
-        svhn.SVHN,
-    ]
+    ds_config_ts: tuple[Type[BaseDatasetConfig]] = tuple(
+        get_dataset_index().values()
+    )
 
     for ds_config_t in ds_config_ts:
         ds_config = ds_config_t()  # type: ignore
