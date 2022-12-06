@@ -11,6 +11,7 @@ from src.pretrain.datasets import BaseDatasetConfig
 class SVHN(BaseDatasetConfig):
     id: str = "svhn"
 
+    @property
     def class_names(self) -> tuple[str, ...]:
         return tuple(str(i) for i in range(10))
 

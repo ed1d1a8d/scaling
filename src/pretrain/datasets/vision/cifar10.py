@@ -11,6 +11,7 @@ from src.pretrain.datasets import BaseDatasetConfig
 class CIFAR10(BaseDatasetConfig):
     id: str = "cifar10"
 
+    @property
     def class_names(self) -> tuple[str, ...]:
         return (
             "airplane",

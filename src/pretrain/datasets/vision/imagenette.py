@@ -28,6 +28,7 @@ from src.pretrain.datasets import BaseDatasetConfig
 class Imagenette(BaseDatasetConfig):
     id: str = "imagenette"
 
+    @property
     def class_names(self) -> tuple[str, ...]:
         return (
             "tench",
