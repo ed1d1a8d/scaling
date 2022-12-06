@@ -7,7 +7,7 @@ import torch
 from transformers import AutoFeatureExtractor, BeitForImageClassification
 from transformers.models.beit.modeling_beit import BeitModel
 
-from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
+from src.pretrain.models.base import BaseEmbedder, BaseEmbedderConfig
 
 
 @dataclasses.dataclass

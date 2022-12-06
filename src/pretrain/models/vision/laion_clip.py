@@ -7,7 +7,7 @@ import PIL.Image
 import transformers
 from torch import nn
 
-from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
+from src.pretrain.models.base import BaseEmbedder, BaseEmbedderConfig
 
 
 @dataclasses.dataclass

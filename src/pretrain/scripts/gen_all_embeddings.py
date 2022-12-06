@@ -10,8 +10,8 @@ from typing import Type
 from simple_parsing import ArgumentParser
 
 from src.pretrain import gen_embeddings
-from src.pretrain.datasets import BaseDatasetConfig
-from src.pretrain.models import BaseEmbedderConfig
+from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
+from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
 from src.slurm import sbatch
 
 
@@ -33,15 +33,9 @@ def main(cfg: Config):
 
     embedder_cfg_t_dict: dict[
         str, Type[BaseEmbedderConfig]
-    ] = gen_embeddings.Config.__dataclass_fields__["embedder_cfg"].metadata[
-        "subgroups"
-    ]
+    ] = get_embedder_index()
 
-    dataset_cfg_t_dict: dict[
-        str, Type[BaseDatasetConfig]
-    ] = gen_embeddings.Config.__dataclass_fields__["dataset_cfg"].metadata[
-        "subgroups"
-    ]
+    dataset_cfg_t_dict: dict[str, Type[BaseDatasetConfig]] = get_dataset_index()
 
     commands: list[str] = []
     for ds_key, dataset_cfg_t in dataset_cfg_t_dict.items():

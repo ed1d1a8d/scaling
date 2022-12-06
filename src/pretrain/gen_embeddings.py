@@ -10,10 +10,9 @@ import wandb
 from simple_parsing import ArgumentParser, subgroups
 from tqdm.auto import tqdm
 
-from src.pretrain.datasets import BaseDatasetConfig
-from src.pretrain.datasets.vision import cifar10, cifar100, imagenette, svhn
-from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
-from src.pretrain.models.vision import laion_clip, msft_beit, openai_clip
+from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
+from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
+from src.pretrain.models.base import BaseEmbedder
 from src.pretrain.probes import EmbeddingDataset
 
 
@@ -21,23 +20,8 @@ from src.pretrain.probes import EmbeddingDataset
 class Config:
     """Configuration for generating embeddings."""
 
-    # Embedder configuration
-    embedder_cfg: BaseEmbedderConfig = subgroups(
-        {
-            "laion_clip": laion_clip.LaionClipConfig,
-            "msft_beit": msft_beit.MsftBeitConfig,
-            "openai_clip": openai_clip.OpenaiClipConfig,
-        }
-    )
-
-    dataset_cfg: BaseDatasetConfig = subgroups(
-        {
-            "cifar10": cifar10.CIFAR10,
-            "cifar100": cifar100.CIFAR100,
-            "imagenette": imagenette.Imagenette,
-            "svhn": svhn.SVHN,
-        }
-    )
+    embedder_cfg: BaseEmbedderConfig = subgroups(get_embedder_index())
+    dataset_cfg: BaseDatasetConfig = subgroups(get_dataset_index())
 
     batch_size: int = 128
     num_workers: int = 12
