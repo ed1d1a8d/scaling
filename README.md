@@ -2,7 +2,7 @@
 
 1. Create a conda environment:
    ```
-   conda env create -f environment.yml
+   micromamba create -f environment.yml
    ```
    If you are on macos, use `environment-macos.yml` instead.
 2. Install pip dependencies:

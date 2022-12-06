@@ -13,6 +13,17 @@ torchaudio==0.12.0; sys_platform == 'darwin'
 jax[cuda11_cudnn805]; sys_platform != 'darwin'
 jax[cpu]; sys_platform == 'darwin'
 
+# Nvidia RAPIDS
+# See https://rapids.ai/pip.html#install
+--find-links https://developer.download.nvidia.com/compute/redist/cudf-cu11
+--find-links https://developer.download.nvidia.com/compute/redist/dask-cudf-cu11
+--find-links https://developer.download.nvidia.com/compute/redist/cuml-cu11
+--find-links https://developer.download.nvidia.com/compute/redist/cugraph-cu11
+cudf-cu11
+dask-cudf-cu11
+cuml-cu11
+cugraph-cu11
+
 # Ray
 ray==1.13.0
 
