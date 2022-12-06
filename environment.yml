@@ -12,3 +12,6 @@ dependencies:
 
   # Supercloud compatibility
   - libacl
+
+  # For Nvidia RAPIDS
+  - cudatoolkit=11.5
