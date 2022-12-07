@@ -70,6 +70,15 @@ class EmbeddingDataset:
             dict_ = pickle.load(f)
         return cls(**dict_)
 
+    def astype(self, dtype: np.dtype) -> EmbeddingDataset:
+        return dataclasses.replace(
+            self,
+            xs_train=self.xs_train.astype(dtype),
+            ys_train=self.ys_train.astype(dtype),
+            xs_test=self.xs_test.astype(dtype),
+            ys_test=self.ys_test.astype(dtype),
+        )
+
     def filter_classes(self, classes: Sequence[int]) -> EmbeddingDataset:
         mask_train = np.isin(self.ys_train, classes)
         mask_test = np.isin(self.ys_test, classes)
