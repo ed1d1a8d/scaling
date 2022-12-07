@@ -308,7 +308,7 @@ def main(cfg: Config):
         embedder_cfg=cfg.embedder_cfg,
     )
     ds = EmbeddingDataset.load_from_file(embedding_cfg.full_save_path).astype(
-        np.float32
+        np.float32  # type: ignore
     )
 
     wandb.log({"class_frequencies": plot_class_frequencies(ds)})
