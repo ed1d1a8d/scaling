@@ -74,9 +74,9 @@ class EmbeddingDataset:
         return dataclasses.replace(
             self,
             xs_train=self.xs_train.astype(dtype),
-            ys_train=self.ys_train.astype(dtype),
+            ys_train=self.ys_train,
             xs_test=self.xs_test.astype(dtype),
-            ys_test=self.ys_test.astype(dtype),
+            ys_test=self.ys_test,
         )
 
     def filter_classes(self, classes: Sequence[int]) -> EmbeddingDataset:

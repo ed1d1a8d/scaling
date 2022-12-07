@@ -19,7 +19,8 @@ echo "Requested GPUS: {N_GPUS}"
 echo "Requested CPUS: {N_CPUS}"
 echo "Actual GPUS:"
 nvidia-smi -L
-echo
+echo "Disk/memory utilization:"
+df -h
 echo "System info: $(uname -a)"
 echo "Running as user: $(whoami)"
 echo "Running in directory: $(pwd)"
@@ -61,6 +62,9 @@ function waitUntilNJobsRemain() {{
 # Wait until only mallory is left
 waitUntilNJobsRemain 1
 pkill -P $$
+
+# Delete conda-pack environment
+rm -rf $DST_ENV_PATH
 
 # Print ending time
 echo
