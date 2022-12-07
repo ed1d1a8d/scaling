@@ -11,9 +11,9 @@ from simple_parsing import ArgumentParser, subgroups
 from tqdm.auto import tqdm
 
 from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
+from src.pretrain.datasets.embedding import EmbeddingDataset
 from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
 from src.pretrain.models.base import BaseEmbedder
-from src.pretrain.probes import EmbeddingDataset
 
 
 @dataclasses.dataclass
