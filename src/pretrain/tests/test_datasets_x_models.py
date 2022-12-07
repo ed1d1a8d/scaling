@@ -9,8 +9,10 @@ import transformers
 
 from src.pretrain.datasets import BaseDatasetConfig
 from src.pretrain.datasets.vision import cifar10, cifar100, imagenette, svhn
+from src.pretrain.datasets.language import imdb
 from src.pretrain.models import BaseEmbedder, BaseEmbedderConfig
 from src.pretrain.models.vision import laion_clip, msft_beit, openai_clip
+from src.pretrain.models.language import bert
 
 
 def run_single_test(
@@ -40,20 +42,10 @@ def run_single_test(
             break
 
 
-def main():
-    embedder_config_ts: list[Type[BaseEmbedderConfig]] = [
-        msft_beit.MsftBeitConfig,
-        laion_clip.LaionClipConfig,
-        openai_clip.OpenaiClipConfig,
-    ]
-
-    ds_config_ts: list[Type[BaseDatasetConfig]] = [
-        cifar10.CIFAR10,
-        cifar100.CIFAR100,
-        imagenette.Imagenette,
-        svhn.SVHN,
-    ]
-
+def run_all_embedders_x_datasets(
+    embedder_config_ts: list[Type[BaseEmbedderConfig]],
+    ds_config_ts: list[Type[BaseDatasetConfig]],
+):
     for ds_config_t in ds_config_ts:
         ds_config = ds_config_t()  # type: ignore
 
@@ -74,6 +66,34 @@ def main():
 
                 print("OK")
                 print()
+
+
+def main():
+    vision_embedder_config_ts: list[Type[BaseEmbedderConfig]] = [
+        msft_beit.MsftBeitConfig,
+        laion_clip.LaionClipConfig,
+        openai_clip.OpenaiClipConfig,
+    ]
+
+    vision_ds_config_ts: list[Type[BaseDatasetConfig]] = [
+        cifar10.CIFAR10,
+        cifar100.CIFAR100,
+        imagenette.Imagenette,
+        svhn.SVHN,
+    ]
+
+    language_embedder_config_ts: list[Type[BaseEmbedderConfig]] = [
+        bert.Bert,
+    ]
+
+    language_ds_config_ts: list[Type[BaseDatasetConfig]] = [
+        imdb.Imdb,
+    ]
+
+    # run_all_embedders_x_datasets(vision_embedder_config_ts, vision_ds_config_ts)
+    run_all_embedders_x_datasets(
+        language_embedder_config_ts, language_ds_config_ts
+    )
 
 
 if __name__ == "__main__":
