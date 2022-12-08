@@ -255,7 +255,7 @@ def plot_scaling_results(
         .sort_values(by=["probe", "n_train"], ascending=[False, True])
     )
 
-    min_err = 1 / cdf.n_train.max()
+    min_err = 1 / cdf.n_train.max() / (n_classes if per_class else 1)
     cdf.loc[cdf.err == 0, "err"] = min_err / 10
 
     # Solid line for linear probe
