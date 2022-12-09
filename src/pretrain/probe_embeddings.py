@@ -311,6 +311,11 @@ def main(cfg: Config):
         np.float32  # type: ignore
     )
 
+    # Save additional info about the embeddings
+    wandb.summary["embed_dim"] = ds.xs_train.shape[-1]
+    wandb.summary["n_embedder_params"] = ds.n_embedder_params
+
+    # Useful plots
     wandb.log({"class_frequencies": plot_class_frequencies(ds)})
     wandb.log({"pca": plot_pca(ds, cfg)})
     wandb.log({"umap": plot_umap(ds, cfg)})
