@@ -1,10 +1,11 @@
 import contextlib
 import datetime
 import io
+import json
 import os
 import pathlib
 import tempfile
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,6 +107,25 @@ def runs_to_df(runs: list[wandb.apis.public.Run]):
             }
             for r in runs
         ]
+    )
+
+
+def artifact_to_df(
+    artifact: wandb.apis.public.Artifact,
+    download_dir: Optional[str] = None,
+) -> pd.DataFrame:
+    if download_dir is None:
+        # Create a temporary directory to download the artifact to
+        with tempfile.TemporaryDirectory() as td:
+            with open(artifact.file(root=td)) as file:
+                json_dict = json.load(file)
+    else:
+        with open(artifact.file(root=download_dir)) as file:
+            json_dict = json.load(file)
+
+    return pd.DataFrame(
+        json_dict["data"],
+        columns=json_dict["columns"],
     )
 
 
