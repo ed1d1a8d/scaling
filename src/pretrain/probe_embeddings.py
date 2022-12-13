@@ -100,6 +100,7 @@ def plot_pca(
         components,
         labels=labels,
         dimensions=range(3),
+        hover_name=range(len(ds.xs_test)),
         color=[cfg.class_names[c] for c in ds.ys_test],
         width=700,
         height=600,
@@ -130,6 +131,7 @@ def plot_umap(
         {
             "x": xs_test_2d[:, 0],
             "y": xs_test_2d[:, 1],
+            "idx": range(len(ds.xs_test)),
             "class": ds.ys_test,
             "class_name": [cfg.class_names[c] for c in ds.ys_test],
         }
@@ -139,6 +141,7 @@ def plot_umap(
         df.sort_values("class"),
         x="x",
         y="y",
+        hover_name="idx",
         color="class_name",
         title=f"UMAP of test set (min_dist={cfg.umap_min_dist}, n_neighbors={cfg.umap_n_neighbors})",
         labels={"class_name": "Class"},
@@ -231,7 +234,17 @@ def get_scaling_results(ds: EmbeddingDataset, cfg: Config) -> pd.DataFrame:
                     ]
                 )
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df["err"] = 1 - df.acc
+    df["hyper"] = ""
+    df.loc[df.probe == "linear", "hyper"] = "c=" + df[
+        df.probe == "linear"
+    ].c.astype(str)
+    df.loc[df.probe == "knn", "hyper"] = "k=" + df[df.probe == "knn"].k.astype(
+        str
+    )
+
+    return df
 
 
 def plot_scaling_results(
@@ -321,21 +334,13 @@ def main(cfg: Config):
     wandb.log({"umap": plot_umap(ds, cfg)})
 
     df = get_scaling_results(ds=ds, cfg=cfg)
-    df["err"] = 1 - df.acc
-    df["hyper"] = ""
-    df.loc[df.probe == "linear", "hyper"] = "c=" + df[
-        df.probe == "linear"
-    ].c.astype(str)
-    df.loc[df.probe == "knn", "hyper"] = "k=" + df[df.probe == "knn"].k.astype(
-        str
-    )
 
     # Save df to wandb
     wandb.log({"df_scaling": wandb.Table(dataframe=df)})
 
     # Plot scaling results
     tot_classes = ds.n_classes
-    for n_classes in tqdm(cfg.n_classes):
+    for n_classes in cfg.n_classes:
         for i in range(cfg.mx_cont_rngs):
             for per_class in [False, True]:
                 cls_start = i * n_classes
