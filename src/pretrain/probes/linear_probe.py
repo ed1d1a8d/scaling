@@ -40,6 +40,7 @@ def run_experiment(
     max_iter: int = 10000,
     seed: int = 0,
     use_gpu: bool = False,
+    report_per_class_results: bool = False,
 ):
     param_dict = dict(
         c=c,
@@ -96,4 +97,15 @@ def run_experiment(
         else np.infty
     )
 
-    return param_dict | dict(acc=acc, xent=xent)
+    # Evaluate the classifier on the test data per class (if requested)
+    per_class_accs: dict[str, float] = {}
+    if report_per_class_results:
+        for y in sorted(np.unique(ds.ys_test)):
+            mask = ds.ys_test == y
+            pred_test: np.ndarray = train_encoder.inverse_transform(
+                clf.predict(ds.xs_test[mask]),
+            )  # type: ignore
+            per_class_accs[f"acc_{y}"] = (pred_test == ds.ys_test[mask]).mean()
+            # TODO: Also compute per-class cross entropy
+
+    return param_dict | dict(acc=acc, xent=xent) | per_class_accs

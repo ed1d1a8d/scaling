@@ -53,6 +53,7 @@ class Config:
 
     n_classes: tuple[int, ...] = (2, 5, 10, 20, 50, 100)
     mx_cont_rngs: int = 3
+    report_per_class_results: bool = False
 
     umap_min_dist: float = 0.1
     umap_n_neighbors: int = 10
@@ -161,6 +162,7 @@ def measure_scaling(
     ks: tuple[int, ...] = (1, 3, 10),
     cs: tuple[float, ...] = (0.01, 1, 100),
     use_gpu: bool = True,
+    report_per_class_results: bool = False,
 ) -> list[dict[str, Any]]:
     def gen_n_trains():
         base = 1
@@ -192,6 +194,7 @@ def measure_scaling(
                     k=k,
                     metric="euclidean",
                     use_gpu=use_gpu,
+                    report_per_class_results=report_per_class_results,
                 )
                 | dict(n_train=n_train, per_class=per_class, probe="knn")
             )
@@ -203,6 +206,7 @@ def measure_scaling(
                     ds=sub_ds,
                     c=c,
                     use_gpu=use_gpu,
+                    report_per_class_results=report_per_class_results,
                 )
                 | dict(n_train=n_train, per_class=per_class, probe="linear")
             )
@@ -230,7 +234,11 @@ def get_scaling_results(ds: EmbeddingDataset, cfg: Config) -> pd.DataFrame:
                 data.extend(
                     [
                         d | dict(cls_start=cls_start, cls_end=cls_end)
-                        for d in measure_scaling(ds=cds, per_class=per_class)
+                        for d in measure_scaling(
+                            ds=cds,
+                            per_class=per_class,
+                            report_per_class_results=cfg.report_per_class_results,
+                        )
                     ]
                 )
 
