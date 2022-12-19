@@ -5,6 +5,7 @@ import pickle
 from typing import Optional, Sequence
 
 import numpy as np
+import numpy.typing as npt
 
 
 def subsample(
@@ -70,7 +71,7 @@ class EmbeddingDataset:
             dict_ = pickle.load(f)
         return cls(**dict_)
 
-    def astype(self, dtype: np.dtype) -> EmbeddingDataset:
+    def astype(self, dtype: npt.DTypeLike) -> EmbeddingDataset:
         return dataclasses.replace(
             self,
             xs_train=self.xs_train.astype(dtype),
