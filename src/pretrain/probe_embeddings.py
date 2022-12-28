@@ -53,7 +53,7 @@ class Config:
 
     n_classes: tuple[int, ...] = (2, 5, 10, 20, 50, 100)
     mx_cont_rngs: int = 3
-    report_per_class_results: bool = False
+    report_per_class_results: bool = True
 
     umap_min_dist: float = 0.1
     umap_n_neighbors: int = 10
