@@ -58,6 +58,12 @@ class Config:
     umap_min_dist: float = 0.1
     umap_n_neighbors: int = 10
 
+    ks: tuple[int, ...] = (1, 3, 10)  # For k-nearest neighbors
+    cs: tuple[float, ...] = (0.01, 1, 100)  # For linear classification
+
+    seed: int = 0
+    use_gpu: bool = True
+
     wandb_dir: str = "/home/gridsan/groups/ccg"
     tags: tuple[str, ...] = ("test",)
 
@@ -159,10 +165,7 @@ def plot_umap(
 def measure_scaling(
     ds: EmbeddingDataset,
     per_class: bool,
-    ks: tuple[int, ...] = (1, 3, 10),
-    cs: tuple[float, ...] = (0.01, 1, 100),
-    use_gpu: bool = True,
-    report_per_class_results: bool = False,
+    cfg: Config,
 ) -> list[dict[str, Any]]:
     def gen_n_trains():
         base = 1
@@ -172,6 +175,7 @@ def measure_scaling(
             base *= 10
 
     results = []
+    rng = np.random.default_rng(cfg.seed)
 
     mx_n_train = ds.min_samples_per_class if per_class else len(ds.xs_train)
     for n_train in gen_n_trains():
@@ -179,13 +183,13 @@ def measure_scaling(
             n_train = mx_n_train
 
         sub_ds = (
-            ds.subsample_per_class(n_train_per_class=n_train)
+            ds.subsample_per_class(n_train_per_class=n_train, rng=rng)
             if per_class
-            else ds.subsample(n_train=n_train)
+            else ds.subsample(n_train=n_train, rng=rng)
         )
 
         # k-NN probe experiments
-        for k in ks:
+        for k in cfg.ks:
             if k >= len(sub_ds.xs_train):
                 continue
             results.append(
@@ -193,20 +197,20 @@ def measure_scaling(
                     ds=sub_ds,
                     k=k,
                     metric="euclidean",
-                    use_gpu=use_gpu,
-                    report_per_class_results=report_per_class_results,
+                    use_gpu=cfg.use_gpu,
+                    report_per_class_results=cfg.report_per_class_results,
                 )
                 | dict(n_train=n_train, per_class=per_class, probe="knn")
             )
 
         # linear probe experiments
-        for c in cs:
+        for c in cfg.cs:
             results.append(
                 linear_probe.run_experiment(
                     ds=sub_ds,
                     c=c,
-                    use_gpu=use_gpu,
-                    report_per_class_results=report_per_class_results,
+                    use_gpu=cfg.use_gpu,
+                    report_per_class_results=cfg.report_per_class_results,
                 )
                 | dict(n_train=n_train, per_class=per_class, probe="linear")
             )
@@ -237,7 +241,7 @@ def get_scaling_results(ds: EmbeddingDataset, cfg: Config) -> pd.DataFrame:
                         for d in measure_scaling(
                             ds=cds,
                             per_class=per_class,
-                            report_per_class_results=cfg.report_per_class_results,
+                            cfg=cfg,
                         )
                     ]
                 )

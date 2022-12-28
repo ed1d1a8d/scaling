@@ -10,3 +10,10 @@ def get_embedder_index() -> dict[str, Type[BaseEmbedderConfig]]:
         "msft_beit": msft_beit.MsftBeitConfig,
         "openai_clip": openai_clip.OpenaiClipConfig,
     }
+
+
+def get_embedder_key(embedder_cfg: BaseEmbedderConfig) -> str:
+    for key, cfg_t in get_embedder_index().items():
+        if isinstance(embedder_cfg, cfg_t):
+            return key
+    raise ValueError(f"Embedder config not found: {embedder_cfg}")
