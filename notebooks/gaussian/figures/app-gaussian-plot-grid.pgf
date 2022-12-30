@@ -12876,13 +12876,13 @@
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=3.340638in,y=0.100000in,,bottom]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \# Train Samples}%
+\pgftext[x=3.340638in,y=0.100000in,,bottom]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Number of training examples}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.196451in, y=1.995754in, left, base,rotate=90.000000]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Classification Error}%
+\pgftext[x=0.196451in, y=2.284528in, left, base,rotate=90.000000]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Test error}%
 \end{pgfscope}%
 \end{pgfpicture}%
 \makeatother%
