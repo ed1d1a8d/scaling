@@ -20,6 +20,10 @@ from wandb.apis.internal import Api as InternalApi
 REPO_BASE = pathlib.Path(__file__).parent.parent.resolve()
 
 
+def ceil_div(a: int, b: int) -> int:
+    return (a + b - 1) // b
+
+
 def to_2d_image(
     pred_fn: Callable[[torch.Tensor], torch.Tensor],
     side_samples: int,
