@@ -221,7 +221,11 @@ def measure_scaling(
     return results
 
 
-def get_scaling_results(ds: EmbeddingDataset, cfg: Config) -> pd.DataFrame:
+def get_scaling_results(
+    ds: EmbeddingDataset,
+    cfg: Config,
+    with_per_class: bool = True,
+) -> pd.DataFrame:
     data: list[dict[str, Any]] = []
 
     tot_classes = ds.n_classes
@@ -234,7 +238,8 @@ def get_scaling_results(ds: EmbeddingDataset, cfg: Config) -> pd.DataFrame:
 
             cds = ds.filter_classes(range(cls_start, cls_end))
 
-            for per_class in [False, True]:
+            per_classes = [False] + ([True] if with_per_class else [])
+            for per_class in per_classes:
                 data.extend(
                     [
                         d | dict(cls_start=cls_start, cls_end=cls_end)

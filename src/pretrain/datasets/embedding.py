@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import dataclasses
 import pickle
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import numpy.typing as npt
+import torch
 
 
 def subsample(
@@ -53,6 +54,8 @@ class EmbeddingDataset:
     embedder_id: str
     n_embedder_params: int = 0
 
+    metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
+
     @property
     def n_classes(self) -> int:
         return len(np.unique(self.ys_train))
@@ -70,6 +73,15 @@ class EmbeddingDataset:
         with open(path, "rb") as f:
             dict_ = pickle.load(f)
         return cls(**dict_)
+
+    def to_gpu(self):
+        return dataclasses.replace(
+            self,
+            xs_train=torch.from_numpy(self.xs_train).cuda(),
+            ys_train=torch.from_numpy(self.ys_train).cuda(),
+            xs_test=torch.from_numpy(self.xs_test).cuda(),
+            ys_test=torch.from_numpy(self.ys_test).cuda(),
+        )
 
     def astype(self, dtype: npt.DTypeLike) -> EmbeddingDataset:
         return dataclasses.replace(
