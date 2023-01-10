@@ -1,12 +1,15 @@
 """Support for working with Gaussian mixture models."""
 
 from __future__ import annotations
+
 import dataclasses
 
-import torch
-import numpy as np
-from src.pretrain.datasets.embedding import EmbeddingDataset
 import cuml.neighbors.kneighbors_classifier
+import numpy as np
+import scipy.stats
+import torch
+
+from src.pretrain.datasets.embedding import EmbeddingDataset
 
 
 @dataclasses.dataclass
@@ -44,7 +47,7 @@ class GMMDataset:
 
         mus = np.zeros((n_classes, d))
         covs = np.zeros((n_classes, d, d))
-        label_flip_probs = np.eye(d)
+        label_flip_probs = np.eye(n_classes)
 
         for i, y in enumerate(idx_to_y):
             # Compute sample mean and covariance for class y
@@ -138,7 +141,7 @@ class GMMDataset:
 
         mus = torch.zeros((n_classes, d), device="cuda")
         covs = torch.zeros((n_classes, d, d), device="cuda")
-        label_flip_probs = torch.eye(d, device="cuda")
+        label_flip_probs = torch.eye(n_classes, device="cuda")
 
         for i, y in enumerate(idx_to_y):
             # Compute sample mean and covariance for class y
@@ -226,3 +229,80 @@ class GMMDataset:
             with_label_noise=with_label_noise,
             label_flip_probs=label_flip_probs.cpu().numpy(),
         )
+
+    def estimate_optimal_error(
+        self,
+        n_samples_per_class: int = 1_000,
+    ) -> np.ndarray:
+        """Returns the error per class."""
+        n_classes = len(self.idx_to_y)
+
+        errs = np.zeros(n_classes)
+        for i in range(n_classes):
+            xs = np.random.multivariate_normal(
+                mean=self.mus[i], cov=self.covs[i], size=n_samples_per_class
+            )
+            ys = np.random.choice(
+                n_classes,
+                size=n_samples_per_class,
+                p=self.label_flip_probs[i],
+            )
+
+            # scores[i, j] is the probability xs[i] is of class j
+            scores = np.zeros((n_samples_per_class, n_classes))
+            for j in range(n_classes):
+                scores[:, j] = scipy.stats.multivariate_normal.logpdf(
+                    xs, mean=self.mus[j], cov=self.covs[j], allow_singular=True
+                )
+
+            # preds[i] is the predicted class for xs[i]
+            preds = scores.argmax(axis=1)
+
+            errs[i] = (preds != ys).mean()
+
+        return errs
+
+    def estimate_optimal_error_gpu(
+        self,
+        n_samples_per_class: int = 1_000,
+    ) -> np.ndarray:
+        """Returns the error per class."""
+        n_classes = len(self.idx_to_y)
+        mus = torch.from_numpy(self.mus).cuda()
+        covs = torch.from_numpy(self.covs).cuda()
+
+        errs = torch.zeros(n_classes, device="cuda")
+        for i in range(n_classes):
+            xs = torch.distributions.multivariate_normal.MultivariateNormal(
+                loc=mus[i],
+                covariance_matrix=covs[i],
+            ).sample(
+                (n_samples_per_class,)  # type: ignore
+            )
+            ys = torch.from_numpy(
+                np.random.choice(
+                    n_classes,
+                    size=n_samples_per_class,
+                    p=self.label_flip_probs[i],
+                ),
+            ).cuda()
+
+            # scores[i, j] is the probability xs[i] is of class j
+            scores = torch.zeros(
+                (n_samples_per_class, n_classes), device="cuda"
+            )
+            for j in range(n_classes):
+                scores[
+                    :, j
+                ] = torch.distributions.multivariate_normal.MultivariateNormal(
+                    loc=mus[j], covariance_matrix=covs[j]
+                ).log_prob(
+                    xs
+                )
+
+            # preds[i] is the predicted class for xs[i]
+            preds = scores.argmax(dim=1)
+
+            errs[i] = (preds != ys).float().mean().item()
+
+        return errs.cpu().numpy()
