@@ -24,9 +24,6 @@ dask-cudf-cu11
 cuml-cu11
 cugraph-cu11
 
-# Ray
-ray==1.13.0
-
 # FFCV
 ffcv
 numba
@@ -74,7 +71,7 @@ black
 flake8
 gpustat
 isort
-ipywidgets
+ipywidgets==7.7.0 # https://github.com/microsoft/vscode-jupyter/issues/11014
 jupyterlab
 mypy
 tqdm
