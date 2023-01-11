@@ -376,7 +376,9 @@ def init_model_with_trained_linear_probe(
         use_gpu=True,
         return_clf_params=True,
     )
-    assert np.all(res_dict["classes"] == np.arange(len(res_dict["classes"])))
+    assert np.all(
+        res_dict["classes"] == np.arange(len(cfg.class_names))
+    )  # TODO: Get rid of this requirement
     if verbose:
         print("Linear probe results:")
         print("acc:", res_dict["acc"])
