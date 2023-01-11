@@ -13,7 +13,7 @@ def get_min_xent(
     labs_train: np.ndarray,
     probs_test: np.ndarray,
     labs_test: np.ndarray,
-) -> float, float:
+) -> tuple[float, float]:
     """Returns optimized xent, unoptimized xent."""
     logits_train = np.log(probs_train)
     logits_test = np.log(probs_test)

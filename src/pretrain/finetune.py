@@ -9,6 +9,7 @@ import contextlib
 import dataclasses
 import enum
 import os
+from typing import Any
 
 import numpy as np
 import torch
@@ -19,10 +20,12 @@ from simple_parsing import ArgumentParser, subgroups
 from torch import nn
 from tqdm.auto import tqdm
 
+from src.pretrain import gen_embeddings
 from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
+from src.pretrain.datasets.embedding import EmbeddingDataset
 from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
 from src.pretrain.models.base import BaseEmbedder
-from src.pretrain.probes import fc_probe
+from src.pretrain.probes import fc_probe, linear_probe
 from src.utils import ceil_div
 from src.wandb_utils import (
     WandBManager,
@@ -50,11 +53,12 @@ class Config:
     1. Log per class metrics
     2. Specify subset of classes as task.
        e.g. via `n_classes: Optional[int] = None`
+    3. Support freezing some prefix of the model.
     """
 
     # Model
     embedder_cfg: BaseEmbedderConfig = subgroups(get_embedder_index())
-    fc_probe_cfg: fc_probe.FCProbeConfig = fc_probe.FCProbeConfig()
+    fc_probe_cfg: fc_probe.FCProbeConfig = fc_probe.FCProbeConfig(n_layers=1)
 
     # Dataset
     dataset_cfg: BaseDatasetConfig = subgroups(get_dataset_index())
@@ -67,6 +71,10 @@ class Config:
     lr: float = 1e-5
     min_lr: float = 1e-6
     lr_decay_patience_evals: int = 5
+
+    # Initialization
+    init_with_trained_linear_probe: bool = False
+    init_linear_probe_c: float = 100
 
     # Train config
     n_train: int = 2048
@@ -231,11 +239,15 @@ def train(
     ds_train: torch.utils.data.Dataset,
     cfg: Config,
 ):
+    print("Splitting train set into a train and val set...")
+    print("Original train size:", len(ds_train))  # type: ignore
     n_train_train = int((1 - cfg.val_frac) * cfg.n_train)
     n_train_val = cfg.n_train - n_train_train
     ds_train, ds_val = torch.utils.data.random_split(
         ds_train, (n_train_train, n_train_val)
     )
+    print("New train size:", len(ds_train))
+    print("      val size:", len(ds_val))
 
     loader_train = cfg.get_loader(ds_train, eval_mode=False)
     loader_val = cfg.get_loader(ds_val, eval_mode=True)
@@ -318,19 +330,95 @@ def train(
             n_epochs += 1
 
 
+def init_model_with_trained_linear_probe(
+    model: fc_probe.FCProbe,
+    ds: torch.utils.data.Dataset,
+    cfg: Config,
+    verbose: bool = False,
+):
+    """
+    Modifies model in place. Expects model embeddings to exist on ds_train.
+    """
+    # Old code: Uses cached embeddings
+    # embedding_cfg = gen_embeddings.Config(
+    #     dataset_cfg=cfg.dataset_cfg, embedder_cfg=cfg.embedder_cfg
+    # )
+    # eds = EmbeddingDataset.load_from_file(embedding_cfg.full_save_path).astype(
+    #     np.float32
+    # )
+
+    # New code: Computes embeddings on the fly
+    xs_train, ys_train = gen_embeddings.embed_dataset(
+        embedder=model.embedder,
+        ds=ds,
+        cfg=gen_embeddings.Config(
+            embedder_cfg=cfg.embedder_cfg,
+            dataset_cfg=cfg.dataset_cfg,
+            batch_size=cfg.eval_batch_size,
+            num_workers=cfg.num_workers,
+        ),
+    )
+
+    # Construct EmbeddingDataset object
+    eds = EmbeddingDataset(
+        xs_train=xs_train,
+        ys_train=ys_train,
+        xs_test=xs_train,
+        ys_test=ys_train,
+        dataset_id=cfg.dataset_cfg.id + f"-finetune-n={cfg.n_train}",
+        embedder_id=cfg.embedder_cfg.id,
+    )
+
+    # Compute optimal probe
+    res_dict: dict[str, Any] = linear_probe.run_experiment(
+        ds=eds,
+        c=cfg.init_linear_probe_c,
+        use_gpu=True,
+        return_clf_params=True,
+    )
+    assert np.all(res_dict["classes"] == np.arange(len(res_dict["classes"])))
+    if verbose:
+        print("Linear probe results:")
+        print("acc:", res_dict["acc"])
+        print("xent_orig:", res_dict["xent_orig"])
+        print("xent:", res_dict["xent"])
+
+    # Set readout layer
+    readout_lyr: nn.Linear
+    (readout_lyr,) = model.probe  # type: ignore
+    with torch.no_grad():
+        readout_lyr.weight.copy_(torch.from_numpy(res_dict["clf_coef"]).T)
+        readout_lyr.bias.copy_(torch.from_numpy(res_dict["clf_intercept"]))
+
+
 def run_experiment(cfg: Config):
     torch.manual_seed(cfg.seed)
 
     print(f"Loading embedder {cfg.embedder_cfg.id}...")
     embedder: BaseEmbedder = cfg.embedder_cfg.get_model().float()
 
+    print(f"Loading dataset {cfg.dataset_cfg.id}...")
+    ds_train_full = cfg.dataset_cfg.get_train_ds(embedder.preprocess)
+    ds_train = torch.utils.data.Subset(
+        ds_train_full,
+        indices=np.random.choice(  # type: ignore
+            len(ds_train_full),  # type: ignore
+            cfg.n_train,
+            replace=False,
+        ),
+    )
+    ds_test = cfg.dataset_cfg.get_test_ds(embedder.preprocess)
+
     print("Constructing finetuning model...")
     model = cfg.fc_probe_cfg.get_fc_probe(embedder)
     model.cuda()
-
-    print(f"Loading dataset {cfg.dataset_cfg.id}...")
-    ds_train = cfg.dataset_cfg.get_train_ds(embedder.preprocess)
-    ds_test = cfg.dataset_cfg.get_test_ds(embedder.preprocess)
+    if cfg.init_with_trained_linear_probe:
+        print("Initializing with trained linear probe...")
+        init_model_with_trained_linear_probe(
+            model=model,
+            ds=ds_train,
+            cfg=cfg,
+        )
 
     try:
         train(

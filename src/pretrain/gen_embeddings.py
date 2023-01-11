@@ -25,6 +25,7 @@ class Config:
 
     batch_size: int = 128
     num_workers: int = 12
+    pin_memory: bool = False
 
     save_dir: str = "/home/gridsan/groups/ccg/data/scaling/embeddings"
     wandb_dir: str = "/home/gridsan/groups/ccg"
@@ -48,7 +49,7 @@ def embed_dataset(
         ds,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
-        pin_memory=True,
+        pin_memory=cfg.pin_memory,
     )
 
     embeddings_list: list[np.ndarray] = []
