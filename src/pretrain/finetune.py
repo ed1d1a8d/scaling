@@ -237,18 +237,9 @@ def evaluate(
 def train(
     model: nn.Module,
     ds_train: torch.utils.data.Dataset,
+    ds_val: torch.utils.data.Dataset,
     cfg: Config,
 ):
-    print("Splitting train set into a train and val set...")
-    print("Original train size:", len(ds_train))  # type: ignore
-    n_train_train = int((1 - cfg.val_frac) * cfg.n_train)
-    n_train_val = cfg.n_train - n_train_train
-    ds_train, ds_val = torch.utils.data.random_split(
-        ds_train, (n_train_train, n_train_val)
-    )
-    print("New train size:", len(ds_train))
-    print("      val size:", len(ds_val))
-
     loader_train = cfg.get_loader(ds_train, eval_mode=False)
     loader_val = cfg.get_loader(ds_val, eval_mode=True)
 
@@ -401,15 +392,14 @@ def run_experiment(cfg: Config):
 
     print(f"Loading dataset {cfg.dataset_cfg.id}...")
     ds_train_full = cfg.dataset_cfg.get_train_ds(embedder.preprocess)
-    ds_train = torch.utils.data.Subset(
-        ds_train_full,
-        indices=np.random.choice(  # type: ignore
-            len(ds_train_full),  # type: ignore
-            cfg.n_train,
-            replace=False,
-        ),
-    )
     ds_test = cfg.dataset_cfg.get_test_ds(embedder.preprocess)
+
+    # Create train and val datasets from ds_train_full
+    n_val = int(cfg.val_frac * cfg.n_train)
+    n_train = cfg.n_train - n_val
+    ds_train, ds_val, _ = torch.utils.data.random_split(
+        ds_train_full, (n_train, n_val, len(ds_train_full) - n_train - n_val)  # type: ignore
+    )
 
     print("Constructing finetuning model...")
     model = cfg.fc_probe_cfg.get_fc_probe(embedder)
@@ -425,7 +415,8 @@ def run_experiment(cfg: Config):
     try:
         train(
             model=model,
-            ds_train=torch.utils.data.Subset(ds_train, range(cfg.n_train)),
+            ds_train=ds_train,
+            ds_val=ds_val,
             cfg=cfg,
         )
     except KeyboardInterrupt:  # Catches SIGINT more generally
