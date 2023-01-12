@@ -5,7 +5,7 @@ import json
 import os
 import pathlib
 import tempfile
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -166,3 +166,17 @@ def wandb_run_save_objs(
                 )
 
             iapi.push(push_dict)
+
+
+def interactive_binary_query(x: Any) -> bool:
+    """Interactively queries the user for a binary answer."""
+    print("Answer for the object:", x)
+
+    ans: bool = False
+    while True:
+        user_input = input("y/n? ").lower().strip()
+        if user_input in ("y", "n"):
+            ans = user_input == "y"
+            break
+
+    return ans

@@ -7,6 +7,7 @@ from typing import Optional
 
 from simple_parsing import ArgumentParser, subgroups
 
+from src import utils
 from src.pretrain.datasets import (
     BaseDatasetConfig,
     get_dataset_index,
@@ -46,6 +47,7 @@ class Config:
     log_dir: str = "finetune"
 
     dry_run: bool = False
+    interactive: bool = False
     tags: tuple[str, ...] = ("finetune-sweep-v1",)
 
     def gen_n_trains(self):
@@ -87,6 +89,9 @@ def main(cfg: Config):
             ]
         )
         commands.append(command)
+
+    if cfg.interactive:
+        commands = [c for c in commands if utils.interactive_binary_query(c)]
 
     # Launch the commands.
     if cfg.dry_run:
