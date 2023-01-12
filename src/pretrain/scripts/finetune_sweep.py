@@ -3,6 +3,7 @@ Launches a sweep of finetuning experiments varying n_train.
 """
 
 import dataclasses
+from typing import Optional
 
 from simple_parsing import ArgumentParser, subgroups
 
@@ -34,6 +35,9 @@ class Config:
     # Minimum n_train size for sweep
     n_train_start: int = 50
 
+    # Possibly set n_val and add it to n_train
+    additive_n_val: Optional[int] = None
+
     n_gpus: int = 1
     n_cpus: int = 20
 
@@ -50,10 +54,15 @@ class Config:
         base: int = self.n_train_start
         while True:
             for i in [1, 2, 5]:
-                if base * i >= max_size:
+                y = base * i + (
+                    self.additive_n_val
+                    if self.additive_n_val is not None
+                    else 0
+                )
+                if y >= max_size:
                     yield max_size
                     return
-                yield base * i
+                yield y
             base *= 10
 
 
@@ -72,6 +81,9 @@ def main(cfg: Config):
                 f"--seed {cfg.seed}",
                 f"--n_train {n_train}",
                 f"--tags {' '.join(cfg.tags)}",
+                f"--n_val_override {cfg.additive_n_val}"
+                if cfg.additive_n_val
+                else "",
             ]
         )
         commands.append(command)
