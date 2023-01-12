@@ -34,7 +34,6 @@ module load cuda/11.6
 # Setup conda-pack environment.
 source scripts/setup-env.sh -r scaling-v3
 source $DST_ENV_PATH/bin/activate
-export LD_LIBRARY_PATH=$DST_ENV_PATH/lib
 
 # Set up and launch proxy
 source scripts/rand-mallory.sh
