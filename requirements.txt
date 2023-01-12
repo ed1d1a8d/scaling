@@ -1,19 +1,17 @@
-# Torch
---find-links https://download.pytorch.org/whl/cu113
-torch==1.12.0; sys_platform != 'darwin'
-torchvision==0.13.0; sys_platform != 'darwin'
-torchaudio==0.12.0; sys_platform != 'darwin'
+# We use Python 3.9 (nvidia rapids needs 3.8 or 3.9)
 
-torch==1.12.0; sys_platform == 'darwin'
-torchvision==0.13.0; sys_platform == 'darwin'
-torchaudio==0.12.0; sys_platform == 'darwin'
+# PyTorch 1.13
+# We use CUDA 11.6 for supercloud support
+--extra-index-url https://download.pytorch.org/whl/cu116
+torch==1.13.1
+torchaudio==0.13.1
+torchvision==0.14.1
 
 # Jax
 --find-links https://storage.googleapis.com/jax-releases/jax_releases.html
-jax[cuda11_cudnn805]; sys_platform != 'darwin'
-jax[cpu]; sys_platform == 'darwin'
+jax[cuda]
 
-# Nvidia RAPIDS
+# Nvidia RAPIDS (for fast linear probes, knn, and umap)
 # See https://rapids.ai/pip.html#install
 --find-links https://developer.download.nvidia.com/compute/redist/cudf-cu11
 --find-links https://developer.download.nvidia.com/compute/redist/dask-cudf-cu11
@@ -24,9 +22,9 @@ dask-cudf-cu11
 cuml-cu11
 cugraph-cu11
 
-# FFCV
-ffcv
-numba
+# FFCV (not supported due to making everything hard)
+# ffcv
+# numba
 
 # Huggingface
 transformers
@@ -50,10 +48,9 @@ torchtyping
 
 # Configuration parsing
 simple-parsing
-dacite
 
 # ThunderSVM
-/home/gridsan/groups/ccg/programs/thundersvm/python; sys_platform != 'darwin'
+/home/gridsan/groups/ccg/programs/thundersvm/python
 
 # UMAP
 umap-learn
