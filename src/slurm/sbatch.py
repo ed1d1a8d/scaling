@@ -17,8 +17,8 @@ SBATCH_TEMPLATE = """#!/bin/bash
 # Print info about the node we're running on
 echo "Requested GPUS: {N_GPUS}"
 echo "Requested CPUS: {N_CPUS}"
-echo "Actual GPUS:"
-nvidia-smi -L
+echo "GPU stats:"
+nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,power.draw,power.limit --format=csv
 echo "Disk/memory utilization:"
 df -h
 echo "System info: $(uname -a)"
