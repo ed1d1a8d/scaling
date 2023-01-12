@@ -27,6 +27,10 @@ echo "Running in directory: $(pwd)"
 echo "Start time: $(date)"
 echo
 
+# Load cuda 11.6
+# See https://supercloud.mit.edu/submitting-jobs
+module load cuda/11.6
+
 # Setup conda-pack environment.
 source scripts/setup-env.sh -r scaling-v3
 source $DST_ENV_PATH/bin/activate
