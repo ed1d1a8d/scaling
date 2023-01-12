@@ -9,7 +9,7 @@ import contextlib
 import dataclasses
 import enum
 import os
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -62,7 +62,6 @@ class Config:
 
     # Dataset
     dataset_cfg: BaseDatasetConfig = subgroups(get_dataset_index())
-    val_frac: float = 0.1  # Fraction of training data to use for validation.
 
     # Optimizer
     optimizer: OptimizerT = OptimizerT.Adam
@@ -79,6 +78,13 @@ class Config:
     # Train config
     n_train: int = 2048
     batch_size: int = 50
+
+    # Validation config
+    # The validation set is taken out of the train set!
+    val_frac: float = 0.1  # Fraction of training data to use for validation.
+    n_val_override: Optional[
+        int
+    ] = None  # Override validation set size to a specific value.
 
     # Eval config
     eval_batch_size: int = 512
@@ -99,13 +105,22 @@ class Config:
     def class_names(self):
         return self.dataset_cfg.class_names
 
+    @property
+    def n_val(self):
+        return self.n_val_override or int(self.val_frac * self.n_train)
+
+    def __post_init__(self):
+        assert (
+            self.n_val <= self.n_train
+        ), "Can't have more validation samples than training samples!"
+
     def get_loader(
         self,
         ds: torch.utils.data.Dataset,
         eval_mode: bool = False,
     ):
         return torch.utils.data.DataLoader(
-            ds,
+            ds,  # type: ignore
             batch_size=self.eval_batch_size if eval_mode else self.batch_size,
             shuffle=not eval_mode,
             num_workers=self.num_workers,
@@ -395,10 +410,13 @@ def run_experiment(cfg: Config):
     ds_test = cfg.dataset_cfg.get_test_ds(embedder.preprocess)
 
     # Create train and val datasets from ds_train_full
-    n_val = int(cfg.val_frac * cfg.n_train)
-    n_train = cfg.n_train - n_val
     ds_train, ds_val, _ = torch.utils.data.random_split(
-        ds_train_full, (n_train, n_val, len(ds_train_full) - n_train - n_val)  # type: ignore
+        ds_train_full,
+        (
+            cfg.n_train - cfg.n_val,
+            cfg.n_val,
+            len(ds_train_full) - cfg.n_train,  # type: ignore
+        ),
     )
 
     print("Constructing finetuning model...")
