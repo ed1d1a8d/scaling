@@ -282,25 +282,9 @@ def train(
                     )
                     return
 
-                bo = process_batch(
-                    imgs=imgs,
-                    labs=labs,
-                    model=model,
-                )
-
-                optimizer.zero_grad()
-                scaler.scale(bo.loss).backward()  # type: ignore
-                scaler.step(optimizer)
-                scaler.update()
-
-                n_steps += 1
-                pbar.update(1)
-                pbar.set_description(
-                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; acc={bo.acc:.4f}; lr={cur_lr:6e}"
-                )
-
                 log_dict: dict[str, WBMetric] = dict()
-                if n_steps % cfg.steps_per_eval == 1:
+                is_validation_step: bool = n_steps % cfg.steps_per_eval == 0
+                if is_validation_step:
                     is_training: bool = model.training
                     model.eval()
                     val_dict, val_imgs = evaluate(model, loader_val, cfg)
@@ -315,9 +299,27 @@ def train(
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
                     log_dict["val_imgs"] = WBMetric(val_imgs)
+
+                bo = process_batch(
+                    imgs=imgs,
+                    labs=labs,
+                    model=model,
+                )
+                if is_validation_step:
                     log_dict["train_imgs"] = WBMetric(
                         get_imgs_to_log(bo=bo, cfg=cfg)
                     )
+
+                optimizer.zero_grad()
+                scaler.scale(bo.loss).backward()  # type: ignore
+                scaler.step(optimizer)
+                scaler.update()
+
+                n_steps += 1
+                pbar.update(1)
+                pbar.set_description(
+                    f"epochs={n_epochs}; loss={bo.loss.item():6e}; acc={bo.acc:.4f}; lr={cur_lr:6e}"
+                )
 
                 WANDB_MANAGER.log(
                     dict(
