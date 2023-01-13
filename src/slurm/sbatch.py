@@ -7,6 +7,7 @@ import git.repo
 
 GIT_ROOT = git.repo.Repo(".", search_parent_directories=True).working_tree_dir
 
+# If this gets too complicated, we could try writing it in Python.
 SBATCH_TEMPLATE = """#!/bin/bash
 
 # Slurm sbatch options
@@ -27,6 +28,38 @@ echo "Running as user: $(whoami)"
 echo "Running in directory: $(pwd)"
 echo "Start time: $(date)"
 echo
+
+# Check if gpu memory is cleared, i.e. (< 100 MiB used memory). This sometimes
+# happens because of zombie processes that don't get cleaned up properly.
+# If memory is not cleared, blacklist this node and relaunch the script.
+# TODO: Support checking memory for more than 1 GPU.
+mem_used=$(nvidia-smi --id=0 --query-gpu=memory.used --format=csv,noheader,nounits)
+if [[ $mem_used -ge 100 ]]; then
+    echo "Memory not cleared!!!!"
+
+    # Helper function for getting old exclude list
+    function getOldExcludeList() {{
+        scontrol show job $SLURM_JOB_ID |
+            grep "ExcNodeList=" |
+            awk -F "ExcNodeList=" '{{print $2}}' |
+            cut -d " " -f 1
+    }}
+    readonly OLD_EXCLUDE_LIST=$(getOldExcludeList)
+    if [[ $OLD_EXCLUDE_LIST == "(null)" ]]; then
+        readonly NEW_EXCLUDE_LIST="$(hostname)"
+    else
+        readonly NEW_EXCLUDE_LIST="$(hostname),$OLD_EXCLUDE_LIST"
+    fi
+    echo "Old exclude list: $OLD_EXCLUDE_LIST"
+    echo "New exclude list: $NEW_EXCLUDE_LIST"
+
+    # Relaunch script blacklisting this node
+    echo "Relaunching script..."
+    scontrol write batch_script $SLURM_JOB_ID - |
+        sbatch --exclude=$NEW_EXCLUDE_LIST
+
+    exit 66
+fi
 
 # Load cuda 11.6
 # See https://supercloud.mit.edu/submitting-jobs
@@ -59,22 +92,6 @@ function waitUntilNJobsRemain() {{
   done
   echo ""
 }}
-
-# Wait up to 5 minutes for gpu memory to clear (< 100 MiB)
-# (needed due to wacky slurm behavior)
-echo -n "Waiting for gpu memory to clear..."
-for i in {{1..300}}; do
-    mem_used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits)
-    echo "Current memory used: $mem_used MiB"
-    if [[ $mem_used -lt 100 ]]; then
-        echo "Memory cleared!"
-        break
-    fi
-    sleep 1
-done
-if [[ $mem_used -ge 100 ]]; then
-    echo "Memory not cleared!!!!"
-fi
 
 # Run experiment
 {EXPERIMENT_CMD}
