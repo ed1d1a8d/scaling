@@ -200,8 +200,8 @@ def get_imgs_to_log(
     cfg: Config,
 ) -> list[wandb.Image]:
     def get_caption(i: int) -> str:
-        lab = cfg.class_names[int(bo.labs[i].item())]
-        pred = cfg.class_names[int(bo.preds[i].item())]
+        lab = cfg.class_names[int(bo.labs[i].item())]  # type: ignore
+        pred = cfg.class_names[int(bo.preds[i].item())]  # type: ignore
         return f"{pred=}; {lab=}"
 
     return [
@@ -251,13 +251,10 @@ def evaluate(
 
 def train(
     model: nn.Module,
-    ds_train: torch.utils.data.Dataset,
-    ds_val: torch.utils.data.Dataset,
+    loader_train: torch.utils.data.DataLoader,
+    loader_val: torch.utils.data.DataLoader,
     cfg: Config,
 ):
-    loader_train = cfg.get_loader(ds_train, eval_mode=False)
-    loader_val = cfg.get_loader(ds_val, eval_mode=True)
-
     optimizer = cfg.get_optimizer(model)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optimizer,
@@ -341,19 +338,19 @@ def init_model_with_trained_linear_probe(
     ds: torch.utils.data.Dataset,
     cfg: Config,
     verbose: bool = False,
-):
+) -> tuple[EmbeddingDataset, Any]:
     """
-    Modifies model in place. Expects model embeddings to exist on ds_train.
-    """
-    # Old code: Uses cached embeddings
-    # embedding_cfg = gen_embeddings.Config(
-    #     dataset_cfg=cfg.dataset_cfg, embedder_cfg=cfg.embedder_cfg
-    # )
-    # eds = EmbeddingDataset.load_from_file(embedding_cfg.full_save_path).astype(
-    #     np.float32
-    # )
+    Procedure:
+        1. Uses model.embedder (in eval mode) to embed ds.
+        2. Fits a linear probe on the embeddings.
+        3. Modifies model in place to have the trained linear probe as its
+           readout layer.
 
-    # New code: Computes embeddings on the fly
+    Returns the embeddings of ds and the trained linear probe.
+    """
+
+    # Compute embeddings of ds
+    model.eval()
     xs_train, ys_train = gen_embeddings.embed_dataset(
         embedder=model.embedder,
         ds=ds,
@@ -380,7 +377,7 @@ def init_model_with_trained_linear_probe(
         ds=eds,
         c=cfg.init_linear_probe_c,
         use_gpu=True,
-        return_clf_params=True,
+        return_clf=True,
     )
     assert np.all(
         res_dict["classes"] == np.arange(len(cfg.class_names))
@@ -395,8 +392,10 @@ def init_model_with_trained_linear_probe(
     readout_lyr: nn.Linear
     (readout_lyr,) = model.probe  # type: ignore
     with torch.no_grad():
-        readout_lyr.weight.copy_(torch.from_numpy(res_dict["clf_coef"]).T)
-        readout_lyr.bias.copy_(torch.from_numpy(res_dict["clf_intercept"]))
+        readout_lyr.weight.copy_(torch.from_numpy(res_dict["clf"].coef_.T))
+        readout_lyr.bias.copy_(torch.from_numpy(res_dict["clf"].intercept_))
+
+    return eds, res_dict["clf"]
 
 
 def run_experiment(cfg: Config):
@@ -419,6 +418,11 @@ def run_experiment(cfg: Config):
         ),
     )
 
+    # Create dataloaders
+    loader_train = cfg.get_loader(ds_train, eval_mode=False)
+    loader_val = cfg.get_loader(ds_val, eval_mode=True)
+    loader_test = cfg.get_loader(ds_test, eval_mode=True)
+
     print("Constructing finetuning model...")
     model = cfg.fc_probe_cfg.get_fc_probe(embedder)
     model.cuda()
@@ -430,13 +434,22 @@ def run_experiment(cfg: Config):
             cfg=cfg,
         )
 
+    print("Evaluating test error of model at init...")
+    model.eval()
+    test_dict, test_imgs = evaluate(model=model, loader=loader_test, cfg=cfg)
+    WANDB_MANAGER.log({f"init_test_imgs": WBMetric(test_imgs)})
+    test_metrics = tag_dict(test_dict, prefix="init_test_")
+    for name, metric in test_metrics.items():
+        wandb.run.summary[name] = metric.data  # type: ignore
+
     try:
         train(
             model=model,
-            ds_train=ds_train,
-            ds_val=ds_val,
+            loader_train=loader_train,
+            loader_val=loader_val,
             cfg=cfg,
         )
+        print("Finished training!")
     except KeyboardInterrupt:  # Catches SIGINT more generally
         print("Training interrupted!")
 
@@ -444,14 +457,9 @@ def run_experiment(cfg: Config):
     load_model(model)
     print("Loaded best model")
 
-    # Evaluate on test set
-    loader_test = cfg.get_loader(ds_test, eval_mode=True)
+    print("Evaluating on test set...")
     model.eval()
-    test_dict, test_imgs = evaluate(
-        model=model,
-        loader=loader_test,
-        cfg=cfg,
-    )
+    test_dict, test_imgs = evaluate(model=model, loader=loader_test, cfg=cfg)
     WANDB_MANAGER.log({f"test_imgs": WBMetric(test_imgs)})
     test_metrics = tag_dict(test_dict, prefix="test_")
     for name, metric in test_metrics.items():

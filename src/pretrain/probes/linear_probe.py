@@ -1,3 +1,5 @@
+from typing import Any
+
 import cuml.linear_model
 import numpy as np
 import scipy.optimize
@@ -42,7 +44,7 @@ def run_experiment(
     seed: int = 0,
     use_gpu: bool = False,
     report_per_class_results: bool = False,
-    return_clf_params: bool = False,
+    return_clf: bool = False,
 ):
     param_dict = dict(
         c=c,
@@ -110,17 +112,14 @@ def run_experiment(
             per_class_accs[f"acc_{y}"] = (pred_test == ds.ys_test[mask]).mean()
             # TODO: Also compute per-class cross entropy
 
-    clf_params: dict[str, np.ndarray] = {}
-    if return_clf_params:
-        clf_params = dict(
-            clf_intercept=clf.intercept_,
-            clf_coef=clf.coef_,
-            classes=train_encoder.classes_,  # type: ignore
-        )
+    clf_dict: dict[str, Any] = {}
+    if return_clf:
+        clf_dict["clf"] = clf
+        clf_dict["classes"] = train_encoder.classes_
 
     return (
         param_dict
         | dict(acc=acc, xent=xent, xent_orig=xent_orig)
         | per_class_accs
-        | clf_params
+        | clf_dict
     )
