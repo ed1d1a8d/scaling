@@ -60,6 +60,22 @@ function waitUntilNJobsRemain() {{
   echo ""
 }}
 
+# Wait up to 5 minutes for gpu memory to clear (< 100 MiB)
+# (needed due to wacky slurm behavior)
+echo -n "Waiting for gpu memory to clear..."
+for i in {{1..300}}; do
+    mem_used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits)
+    echo "Current memory used: $mem_used MiB"
+    if [[ $mem_used -lt 100 ]]; then
+        echo "Memory cleared!"
+        break
+    fi
+    sleep 1
+done
+if [[ $mem_used -ge 100 ]]; then
+    echo "Memory not cleared!!!!"
+fi
+
 # Run experiment
 {EXPERIMENT_CMD}
 
