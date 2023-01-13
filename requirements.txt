@@ -1,11 +1,13 @@
 # We use Python 3.9 (nvidia rapids needs 3.8 or 3.9)
 
-# PyTorch 1.13
+# PyTorch 1.12
+# 1.13 has a bug on supercloud:
+#   https://discuss.pytorch.org/t/torch-cuda-device-count-is-0/168545/6
 # We use CUDA 11.6 for supercloud support
 --extra-index-url https://download.pytorch.org/whl/cu116
-torch==1.13.1
-torchaudio==0.13.1
-torchvision==0.14.1
+torch==1.12.1+cu116
+torchvision==0.13.1+cu116
+torchaudio==0.12.1
 
 # Jax
 --find-links https://storage.googleapis.com/jax-releases/jax_releases.html
