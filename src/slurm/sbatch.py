@@ -54,7 +54,7 @@ function waitUntilNJobsRemain() {{
   echo "Waiting on $n_jobs background jobs until $1 jobs left..."
   while [[ $n_jobs -gt $1 ]]; do
     n_jobs=$(jobs -rp | wc -l)
-    echo -n "."
+    # echo -n "."  # Uncomment to print a dot for each sleep
     sleep 1
   done
   echo ""
