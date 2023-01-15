@@ -284,6 +284,7 @@ def train(
 
                 log_dict: dict[str, WBMetric] = dict()
                 is_validation_step: bool = n_steps % cfg.steps_per_eval == 0
+                val_loss_decreased: bool = False
                 if is_validation_step:
                     is_training: bool = model.training
                     model.eval()
@@ -296,16 +297,17 @@ def train(
                         min_val_loss = val_loss
                         wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
                         save_model(model)
+                        log_dict["val_imgs"] = WBMetric(val_imgs)
+                        val_loss_decreased = True
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
-                    log_dict["val_imgs"] = WBMetric(val_imgs)
 
                 bo = process_batch(
                     imgs=imgs,
                     labs=labs,
                     model=model,
                 )
-                if is_validation_step:
+                if is_validation_step and val_loss_decreased:
                     log_dict["train_imgs"] = WBMetric(
                         get_imgs_to_log(bo=bo, cfg=cfg)
                     )
