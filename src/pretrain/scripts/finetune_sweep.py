@@ -42,7 +42,7 @@ class Config:
     n_gpus: int = 1
     n_cpus: int = 20
 
-    n_nodes: int = 11
+    max_nodes: int = 10
     max_concurrent: int = 1
     log_dir: str = "finetune"
 
@@ -100,7 +100,7 @@ def main(cfg: Config):
     else:
         sbatch.launch_sharded_experiments(
             commands=commands,
-            n_nodes=cfg.n_nodes,
+            n_nodes=min(cfg.max_nodes, len(commands)),
             max_concurrent=cfg.max_concurrent,
             log_dir=cfg.log_dir,
             n_gpus=cfg.n_gpus,
