@@ -114,6 +114,31 @@ def runs_to_df(runs: list[wandb.apis.public.Run]):
     )
 
 
+def get_run_metadata(
+    run: wandb.apis.public.Run,
+    download_dir: Optional[str] = None,
+) -> dict[str, Any]:
+    wf: wandb.apis.public.File = run.file("wandb-metadata.json")
+
+    if download_dir is None:
+        # Create a temporary directory to download the artifact to
+        with tempfile.TemporaryDirectory() as td:
+            with wf.download(root=td) as file:
+                return json.load(file)
+    else:
+        with wf.download(root=download_dir) as file:
+            return json.load(file)
+
+
+def get_run_command(
+    run: wandb.apis.public.Run,
+    download_dir: Optional[str] = None,
+) -> list[str]:
+    # https://docs.wandb.ai/guides/track/public-api-guide#get-the-command-that-ran-the-run
+    meta = get_run_metadata(run, download_dir=download_dir)
+    return ["python"] + [meta["program"]] + meta["args"]
+
+
 def artifact_to_df(
     artifact: wandb.apis.public.Artifact,
     download_dir: Optional[str] = None,
