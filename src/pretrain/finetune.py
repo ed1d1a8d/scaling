@@ -500,7 +500,8 @@ if __name__ == "__main__":
         project="finetune",
         dir=cfg.wandb_dir,
         tags=cfg.tags,
-        config=dataclasses.asdict(cfg),
+        config=dataclasses.asdict(cfg)
+        | dict(SLURM_JOB_ID=os.environ.get("SLURM_JOB_ID")),
         save_code=True,
     )
 
