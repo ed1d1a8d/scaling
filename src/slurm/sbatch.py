@@ -72,7 +72,7 @@ source $DST_ENV_PATH/bin/activate
 # Set up and launch proxy
 source scripts/rand-mallory.sh
 {{ mallory -config $TMP_MALLORY_CONFIG >/dev/null; }} &
-sleep 10  # Wait for mallory to start
+sleep 20  # Wait for mallory to start
 
 # Set up Hugging Face cache that supports locking.
 export HF_HOME="/run/user/$UID/huggingface"
