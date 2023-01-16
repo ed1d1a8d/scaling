@@ -63,7 +63,8 @@ pandas
 plotly
 
 # Experiment management
-wandb
+# Older version due to https://github.com/wandb/wandb/issues/4779
+wandb==0.13.7
 
 # Utilities
 black
