@@ -20,13 +20,13 @@ from simple_parsing import ArgumentParser, subgroups
 from torch import nn
 from tqdm.auto import tqdm
 
+from src import utils
 from src.pretrain import gen_embeddings
 from src.pretrain.datasets import BaseDatasetConfig, get_dataset_index
 from src.pretrain.datasets.embedding import EmbeddingDataset
 from src.pretrain.models import BaseEmbedderConfig, get_embedder_index
 from src.pretrain.models.base import BaseEmbedder
 from src.pretrain.probes import fc_probe, linear_probe
-from src.utils import ceil_div
 from src.wandb_utils import (
     WandBManager,
     WBMetric,
@@ -78,6 +78,7 @@ class Config:
     # Train config
     n_train: int = 2048
     batch_size: int = 50
+    n_layers_to_freeze: int = 0
 
     # Validation config
     # The validation set is taken out of the train set!
@@ -99,7 +100,7 @@ class Config:
 
     @property
     def steps_per_eval(self):
-        return ceil_div(self.samples_per_eval, self.batch_size)
+        return utils.ceil_div(self.samples_per_eval, self.batch_size)
 
     @property
     def class_names(self):
@@ -437,6 +438,17 @@ def run_experiment(cfg: Config):
             ds=ds_train,
             cfg=cfg,
         )
+
+    print("Freezing embedder...")
+    lyrs = model.embedder.get_layers_for_freezing()
+    assert cfg.n_layers_to_freeze <= len(lyrs)
+    print(f"Freezing {cfg.n_layers_to_freeze} / {len(lyrs)} layers")
+    for lyr in lyrs[: cfg.n_layers_to_freeze]:
+        utils.freeze(lyr)
+    wandb.run.summary["n_total_params"] = utils.count_params(model)  # type: ignore
+    wandb.run.summary["n_trainable_params"] = sum(  # type: ignore
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
 
     print("Evaluating test error of model at init...")
     model.eval()

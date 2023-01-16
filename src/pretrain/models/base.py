@@ -51,3 +51,6 @@ class BaseEmbedder(ABC, nn.Module):
     @abstractmethod
     def get_embeddings(self, xs: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
+
+    def get_layers_for_freezing(self) -> list[nn.Module]:
+        raise NotImplementedError

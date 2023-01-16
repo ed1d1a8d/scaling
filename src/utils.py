@@ -180,3 +180,16 @@ def interactive_binary_query(x: Any) -> bool:
             break
 
     return ans
+
+
+def count_params(module: torch.nn.Module) -> int:
+    return sum(p.numel() for p in module.parameters())
+
+
+def freeze(module: torch.nn.Module) -> None:
+    """
+    WARNING: Does not work for BatchNorm layers.
+             In particular, we don't freeze the running mean and variance.
+    """
+    for param in module.parameters():
+        param.requires_grad = False
