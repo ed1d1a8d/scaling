@@ -15,6 +15,7 @@ SBATCH_TEMPLATE = """#!/bin/bash
 #SBATCH -c {N_CPUS}
 #SBATCH -o {LOG_DIR}/log-%j
 #SBATCH -e {LOG_DIR}/log-%j
+#SBATCH --open-mode=append
 
 # Print info about the node we're running on
 echo "Requested GPUS: {N_GPUS}"
