@@ -91,6 +91,7 @@ class Config:
     eval_batch_size: int = 512
     samples_per_eval: int = 25000  # aka epoch size
     n_imgs_to_log_per_eval: int = 15
+    log_imgs_during_training: bool = False
 
     # Other options
     seed: int = 0
@@ -298,8 +299,9 @@ def train(
                         min_val_loss = val_loss
                         wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
                         save_model(model)
-                        log_dict["val_imgs"] = WBMetric(val_imgs)
                         val_loss_decreased = True
+                        if cfg.log_imgs_during_training:
+                            log_dict["val_imgs"] = WBMetric(val_imgs)
 
                     log_dict |= tag_dict(val_dict, prefix=f"val_")
 
@@ -308,7 +310,11 @@ def train(
                     labs=labs,
                     model=model,
                 )
-                if is_validation_step and val_loss_decreased:
+                if (
+                    cfg.log_imgs_during_training
+                    and is_validation_step
+                    and val_loss_decreased
+                ):
                     log_dict["train_imgs"] = WBMetric(
                         get_imgs_to_log(bo=bo, cfg=cfg)
                     )
