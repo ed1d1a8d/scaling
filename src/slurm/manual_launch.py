@@ -23,7 +23,6 @@ class Config:
 
 
 def main(cfg: Config):
-
     # Read commands from stdin
     commands: list[str] = [c.strip() for c in sys.stdin.readlines()]
 
@@ -31,6 +30,7 @@ def main(cfg: Config):
     if cfg.dry_run:
         for command in commands:
             print(command)
+        print(f"Would have launched {len(commands)} commands.")
     else:
         sbatch.launch_sharded_experiments(
             commands=commands,
