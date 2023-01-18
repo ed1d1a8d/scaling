@@ -31,11 +31,15 @@ class Config:
     init_with_trained_linear_probe: bool = True
     batch_size: int = 50
     seed: int = 0
+    lr: float = 1e-5
     # END specific finetune overrides
 
     # Freezing configuration
-    freeze_start: int = 0
-    freeze_end: int = 1  # inclusive
+    n_freezes: tuple[int, ...] = (18,)
+
+    # fc_probe_cfg
+    n_layerss: tuple[int, ...] = (1,)
+    hidden_dims: tuple[int, ...] = (512,)
 
     # Minimum n_train size for sweep
     n_train_start: int = 50
@@ -71,33 +75,35 @@ class Config:
                 yield y
             base *= 10
 
-    def n_freezes(self):
-        return range(self.freeze_start, self.freeze_end + 1)
-
 
 def main(cfg: Config):
 
     commands: list[str] = []
     for n_train in cfg.gen_n_trains():
-        for n_freeze in cfg.n_freezes():
-            command = " ".join(
-                [
-                    "python -m src.pretrain.finetune",
-                    f"--dataset_cfg {get_dataset_key(cfg.dataset_cfg)}",
-                    f"--embedder_cfg {get_embedder_key(cfg.embedder_cfg)}",
-                    f"--embedder_cfg.id {cfg.embedder_cfg.id}",
-                    f"--init_with_trained_linear_probe {cfg.init_with_trained_linear_probe}",
-                    f"--batch_size {cfg.batch_size}",
-                    f"--seed {cfg.seed}",
-                    f"--n_train {n_train}",
-                    f"--n_layers_to_freeze {n_freeze}",
-                    f"--tags {' '.join(cfg.tags)}",
-                    f"--n_val_override {cfg.additive_n_val}"
-                    if cfg.additive_n_val
-                    else "",
-                ]
-            )
-            commands.append(command)
+        for n_freeze in cfg.n_freezes:
+            for n_layers in cfg.n_layerss:
+                for hidden_dim in cfg.hidden_dims:
+                    command = " ".join(
+                        [
+                            "python -m src.pretrain.finetune",
+                            f"--dataset_cfg {get_dataset_key(cfg.dataset_cfg)}",
+                            f"--embedder_cfg {get_embedder_key(cfg.embedder_cfg)}",
+                            f"--embedder_cfg.id {cfg.embedder_cfg.id}",
+                            f"--init_with_trained_linear_probe {cfg.init_with_trained_linear_probe}",
+                            f"--batch_size {cfg.batch_size}",
+                            f"--seed {cfg.seed}",
+                            f"--n_train {n_train}",
+                            f"--n_layers {n_layers}",
+                            f"--hidden_dim {hidden_dim}",
+                            f"--lr {cfg.lr}",
+                            f"--n_layers_to_freeze {n_freeze}",
+                            f"--tags {' '.join(cfg.tags)}",
+                            f"--n_val_override {cfg.additive_n_val}"
+                            if cfg.additive_n_val
+                            else "",
+                        ]
+                    )
+                    commands.append(command)
 
     if cfg.interactive:
         commands = [c for c in commands if utils.interactive_binary_query(c)]
@@ -106,6 +112,7 @@ def main(cfg: Config):
     if cfg.dry_run:
         for command in commands:
             print(command)
+        print(f"Would have launched {len(commands)} commands.")
     else:
         sbatch.launch_sharded_experiments(
             commands=commands,
