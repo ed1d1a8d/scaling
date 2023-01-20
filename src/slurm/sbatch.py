@@ -94,6 +94,11 @@ function waitUntilNJobsRemain() {{
   echo ""
 }}
 
+# Check that python environment is set up correctly
+echo "PATH: $PATH"
+echo "PYTHONPATH: $PYTHONPATH"
+echo "PYTHON: $(which python)"
+
 # Run experiment
 {EXPERIMENT_CMD}
 
