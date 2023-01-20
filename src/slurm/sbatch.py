@@ -16,6 +16,7 @@ SBATCH_TEMPLATE = """#!/bin/bash
 #SBATCH -o {LOG_DIR}/log-%j
 #SBATCH -e {LOG_DIR}/log-%j
 #SBATCH --open-mode=append
+#SBATCH --get-user-env=60L
 
 # Print info about the node we're running on
 echo "Requested GPUS: {N_GPUS}"
@@ -27,6 +28,7 @@ df -h
 echo "System info: $(uname -a)"
 echo "Running as user: $(whoami)"
 echo "Running in directory: $(pwd)"
+echo "PATH: $PATH"
 echo "Start time: $(date)"
 echo
 
