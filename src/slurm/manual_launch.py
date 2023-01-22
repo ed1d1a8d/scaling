@@ -26,20 +26,16 @@ def main(cfg: Config):
     # Read commands from stdin
     commands: list[str] = [c.strip() for c in sys.stdin.readlines()]
 
-    # Launch the commands.
-    if cfg.dry_run:
-        for command in commands:
-            print(command)
-        print(f"Would have launched {len(commands)} commands.")
-    else:
-        sbatch.launch_sharded_experiments(
-            commands=commands,
-            n_nodes=min(cfg.max_nodes, len(commands)),
-            max_concurrent=cfg.max_concurrent,
-            log_dir=cfg.log_dir,
-            n_gpus=cfg.n_gpus,
-            n_cpus=cfg.n_cpus,
-        )
+    sbatch.fancy_launch(
+        commands=commands,
+        n_nodes=min(cfg.max_nodes, len(commands)),
+        max_concurrent=cfg.max_concurrent,
+        log_dir=cfg.log_dir,
+        n_gpus=cfg.n_gpus,
+        n_cpus=cfg.n_cpus,
+        interactive=False,
+        dry_run=cfg.dry_run,
+    )
 
 
 if __name__ == "__main__":

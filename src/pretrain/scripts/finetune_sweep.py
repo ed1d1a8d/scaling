@@ -105,23 +105,17 @@ def main(cfg: Config):
                     )
                     commands.append(command)
 
-    if cfg.interactive:
-        commands = [c for c in commands if utils.interactive_binary_query(c)]
-
-    # Launch the commands.
-    if cfg.dry_run:
-        for command in commands:
-            print(command)
-        print(f"Would have launched {len(commands)} commands.")
-    else:
-        sbatch.launch_sharded_experiments(
-            commands=commands,
-            n_nodes=min(cfg.max_nodes, len(commands)),
-            max_concurrent=cfg.max_concurrent,
-            log_dir=cfg.log_dir,
-            n_gpus=cfg.n_gpus,
-            n_cpus=cfg.n_cpus,
-        )
+    # Launch commands on slurm
+    sbatch.fancy_launch(
+        commands=commands,
+        n_nodes=min(cfg.max_nodes, len(commands)),
+        max_concurrent=cfg.max_concurrent,
+        log_dir=cfg.log_dir,
+        n_gpus=cfg.n_gpus,
+        n_cpus=cfg.n_cpus,
+        dry_run=cfg.dry_run,
+        interactive=cfg.interactive,
+    )
 
 
 if __name__ == "__main__":

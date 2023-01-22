@@ -5,6 +5,8 @@ from typing import Sequence
 
 import git.repo
 
+from src import utils
+
 GIT_ROOT = git.repo.Repo(".", search_parent_directories=True).working_tree_dir
 
 # If this gets too complicated, we could try writing it in Python.
@@ -190,6 +192,44 @@ def launch_sharded_experiments(
     for chunk in chunks:
         launch_parallel_experiments(
             commands=chunk,
+            max_concurrent=max_concurrent,
+            log_dir=log_dir,
+            n_gpus=n_gpus,
+            n_cpus=n_cpus,
+        )
+
+
+def fancy_launch(
+    commands: Sequence[str],
+    max_concurrent: int,
+    n_nodes: int,
+    log_dir: str,
+    n_gpus: int,
+    n_cpus: int,
+    dry_run: bool,
+    interactive: bool,
+):
+    """
+    A wrapper around launch_sharded_experiments.
+
+    Supports dry_run mode, where the commands are printed instead of launched.
+
+    Supports interactive mode, where the user is prompted to confirm whether
+    each command should be included.
+    """
+
+    if interactive:
+        commands = [c for c in commands if utils.interactive_binary_query(c)]
+
+    # Launch the commands.
+    if dry_run:
+        for command in commands:
+            print(command)
+        print(f"Would have launched {len(commands)} commands.")
+    else:
+        launch_sharded_experiments(
+            commands=commands,
+            n_nodes=min(n_nodes, len(commands)),
             max_concurrent=max_concurrent,
             log_dir=log_dir,
             n_gpus=n_gpus,

@@ -69,19 +69,17 @@ def main(cfg: Config):
                 )
                 commands.append(command)
 
-    # Launch the commands.
-    if cfg.dry_run:
-        for command in commands:
-            print(command)
-    else:
-        sbatch.launch_sharded_experiments(
-            commands=commands,
-            n_nodes=cfg.n_nodes,
-            max_concurrent=cfg.max_concurrent,
-            log_dir=cfg.log_dir,
-            n_gpus=cfg.n_gpus,
-            n_cpus=cfg.n_cpus,
-        )
+    # Launch commands
+    sbatch.fancy_launch(
+        commands=commands,
+        n_nodes=cfg.n_nodes,
+        max_concurrent=cfg.max_concurrent,
+        log_dir=cfg.log_dir,
+        n_gpus=cfg.n_gpus,
+        n_cpus=cfg.n_cpus,
+        dry_run=cfg.dry_run,
+        interactive=False,
+    )
 
 
 if __name__ == "__main__":
