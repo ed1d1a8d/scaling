@@ -18,5 +18,6 @@ def main():
 
     print(f.get_list())
 
+
 if __name__ == "__main__":
     main()

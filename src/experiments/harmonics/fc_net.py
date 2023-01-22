@@ -121,14 +121,18 @@ class FCNet(pl.LightningModule):
             with torch.no_grad():
                 # Prune everything but output layer
                 for param in self.net[:-1].parameters():
-                    param.multiply_((torch.rand_like(param) <= self.cfg.sparsity))
+                    param.multiply_(
+                        (torch.rand_like(param) <= self.cfg.sparsity)
+                    )
                 for param in self.net[-1].parameters():
                     param.multiply_(
                         (torch.rand_like(param) <= self.cfg.output_sparsity)
                     )
 
         if self.cfg.minnorm_cfg.enabled:
-            self.alphas = nn.Parameter(torch.zeros(self.cfg.minnorm_cfg.n_samples))
+            self.alphas = nn.Parameter(
+                torch.zeros(self.cfg.minnorm_cfg.n_samples)
+            )
 
         self.save_hyperparameters()
 
@@ -136,7 +140,9 @@ class FCNet(pl.LightningModule):
         return torch.squeeze(self.net(x), dim=-1)
 
     def get_l0_norm(self) -> torch.Tensor:
-        return sum((p.abs() > self.cfg.l0_clip).sum() for p in self.net.parameters())
+        return sum(
+            (p.abs() > self.cfg.l0_clip).sum() for p in self.net.parameters()
+        )
 
     def get_l1_norm(self) -> torch.Tensor:
         return sum(p.abs().sum() for p in self.net.parameters())
@@ -242,7 +248,8 @@ class FCNet(pl.LightningModule):
             mse
             + self.cfg.high_freq_lambda * hfn
             + self.cfg.l1_reg_lambda * torch.relu(l1_norm - self.cfg.l1_reg_lim)
-            + self.cfg.l2_reg_lambda * torch.relu(l2_norm2 - self.cfg.l2_reg_lim)
+            + self.cfg.l2_reg_lambda
+            * torch.relu(l2_norm2 - self.cfg.l2_reg_lim)
         )
         self.log(f"{log_prefix}loss", loss)
 

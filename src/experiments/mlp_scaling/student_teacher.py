@@ -20,7 +20,7 @@ class ExperimentConfig:
     n_test: int = 1024
     ds_test_seed: int = -2
 
-    train_sizes: tuple[int] = tuple(int(1.7 ** x) for x in range(1, 25))
+    train_sizes: tuple[int] = tuple(int(1.7**x) for x in range(1, 25))
     trials_per_size: int = 4
 
     early_stopping: bool = True  # Whether to use early stopping
@@ -123,7 +123,9 @@ def run_experiment(cfg: ExperimentConfig):
             histories[n].append(hist)
 
             print(f"train_mse={hist.history['mean_squared_error_loss'][-1]}")
-            print(f"val_mse  ={hist.history['val_mean_squared_error_loss'][-1]}")
+            print(
+                f"val_mse  ={hist.history['val_mean_squared_error_loss'][-1]}"
+            )
 
             utils.mlflow_log_jax(
                 {k: [h.history for h in hs] for k, hs in histories.items()},

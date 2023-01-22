@@ -41,7 +41,8 @@ class TestHarmonicFn(unittest.TestCase):
         dm = HypercubeDataModule(
             fn=self.hf,
             input_dim=self.hf.cfg.input_dim,
-            n_train=2 * (2 * self.hf.cfg.freq_limit + 1) ** self.hf.cfg.input_dim,
+            n_train=2
+            * (2 * self.hf.cfg.freq_limit + 1) ** self.hf.cfg.input_dim,
             n_val=1024,
             train_seed=-1,
             val_seed=-1,

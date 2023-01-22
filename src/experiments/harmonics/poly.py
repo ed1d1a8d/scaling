@@ -180,7 +180,9 @@ class ChebPoly(pl.LightningModule):
         ################################
 
         cheb_degs = (
-            np.mgrid[tuple(slice(0, deg_limit + 1) for _ in range(D))].reshape(D, -1).T
+            np.mgrid[tuple(slice(0, deg_limit + 1) for _ in range(D))]
+            .reshape(D, -1)
+            .T
         )
         with torch.no_grad():
             cheb_Phi = cls.cheb_basis(

@@ -77,7 +77,8 @@ class ExperimentConfig:
     @property
     def net_cfg(self) -> FCNetConfig:
         patience_ub_in_epochs = math.ceil(
-            self.patience_steps / (self.data_cfg.n_train / self.data_cfg.batch_size)
+            self.patience_steps
+            / (self.data_cfg.n_train / self.data_cfg.batch_size)
         )
         return dataclasses.replace(
             self.base_net_cfg,
@@ -179,7 +180,8 @@ def train(dm: HypercubeDataModule, net: FCNet):
             EarlyStopping(
                 monitor=net.cfg.sched_monitor,
                 patience=max(
-                    net.cfg.sched_patience + 10, int(1.5 * net.cfg.sched_patience)
+                    net.cfg.sched_patience + 10,
+                    int(1.5 * net.cfg.sched_patience),
                 ),
                 mode="min",
             ),
@@ -203,18 +205,24 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
             weights_summary=None,
         ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
 
-    wandb.run.summary["final_train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
+    wandb.run.summary["final_train_mse"] = _get_mse(
+        dm.train_dataloader(shuffle=False)
+    )
     wandb.run.summary["final_val_mse"] = _get_mse(dm.val_dataloader())
 
 
 def run_experiment(cfg: ExperimentConfig):
     teacher_net = cfg.get_teacher_net()
-    torch.save(teacher_net.state_dict(), os.path.join(wandb.run.dir, "teacher.pt"))
+    torch.save(
+        teacher_net.state_dict(), os.path.join(wandb.run.dir, "teacher.pt")
+    )
     viz_to_wandb(cfg=cfg, net=teacher_net, viz_name="teacher")
     with torch.no_grad():
         wandb.run.summary["teacher_l0_norm"] = teacher_net.get_l0_norm().item()
         wandb.run.summary["teacher_l1_norm"] = teacher_net.get_l1_norm().item()
-        wandb.run.summary["teacher_l2_norm2"] = teacher_net.get_l2_norm2().item()
+        wandb.run.summary[
+            "teacher_l2_norm2"
+        ] = teacher_net.get_l2_norm2().item()
 
     dm = cfg.get_dm(net=teacher_net)
     dm.setup()
@@ -227,7 +235,9 @@ def run_experiment(cfg: ExperimentConfig):
     pl.seed_everything(seed=cfg.training_seed, workers=True)
     train(dm, student_net)
 
-    torch.save(student_net.state_dict(), os.path.join(wandb.run.dir, "student.pt"))
+    torch.save(
+        student_net.state_dict(), os.path.join(wandb.run.dir, "student.pt")
+    )
     viz_to_wandb(cfg=cfg, net=student_net, viz_name="student_trained")
     evaluate(dm, student_net)
 

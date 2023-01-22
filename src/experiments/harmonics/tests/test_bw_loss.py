@@ -25,7 +25,8 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             freq_limit=freq_limit,
-                            n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
+                            n_samples=2
+                            * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
                     ),
@@ -36,7 +37,8 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                             fn=hf.forward,
                             input_dim=hf.cfg.input_dim,
                             freq_limit=freq_limit - 1,
-                            n_samples=2 * (2 * freq_limit + 1) ** hf.cfg.input_dim,
+                            n_samples=2
+                            * (2 * freq_limit + 1) ** hf.cfg.input_dim,
                             device=hf.device,
                         )
                     ),
@@ -47,7 +49,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
         torch.manual_seed(43)
         with torch.no_grad():
             self.assertAlmostEqual(
-                (np.pi ** 4 - 63) / (18 * np.pi ** 4),
+                (np.pi**4 - 63) / (18 * np.pi**4),
                 bw_loss.high_freq_norm_mcls(
                     fn=lambda xs: torch.abs(xs.sum(axis=-1) - 1),
                     input_dim=2,
@@ -55,7 +57,7 @@ class TestHighFreqNormMCLS(unittest.TestCase):
                     n_samples=400_000,
                     device="cpu",
                     dtype=torch.float64,
-                    #use_lstsq=True,
+                    # use_lstsq=True,
                 ).item(),
                 places=5,
             )
@@ -101,7 +103,7 @@ class TestHighFreqNormDFT(unittest.TestCase):
     def test_abs_x_plus_y_minus_1(self):
         with torch.no_grad():
             self.assertAlmostEqual(
-                (np.pi ** 4 - 63) / (18 * np.pi ** 4),
+                (np.pi**4 - 63) / (18 * np.pi**4),
                 bw_loss.high_freq_norm_dft(
                     fn=lambda xs: torch.abs(xs.sum(axis=-1) - 1),
                     input_dim=2,

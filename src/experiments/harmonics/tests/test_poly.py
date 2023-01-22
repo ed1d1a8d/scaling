@@ -70,7 +70,8 @@ class TestPoly(unittest.TestCase):
         dm = HypercubeDataModule(
             fn=self.poly,
             input_dim=self.poly.cfg.input_dim,
-            n_train=2 * (self.poly.cfg.deg_limit + 1) ** self.poly.cfg.input_dim,
+            n_train=2
+            * (self.poly.cfg.deg_limit + 1) ** self.poly.cfg.input_dim,
             n_val=1024,
             train_seed=-1,
             val_seed=-1,

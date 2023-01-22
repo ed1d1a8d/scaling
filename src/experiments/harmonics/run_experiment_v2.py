@@ -81,13 +81,20 @@ class ExperimentConfig:
         return FCNet(
             dataclasses.replace(
                 self.net_cfg,
-                layer_widths=(self.net_width, self.net_width, self.net_width, 1),
+                layer_widths=(
+                    self.net_width,
+                    self.net_width,
+                    self.net_width,
+                    1,
+                ),
                 sched_patience=patience_ub_in_epochs,
             )
         )
 
 
-def viz_to_wandb(cfg: ExperimentConfig, fn: Union[HarmonicFn, FCNet], viz_name: str):
+def viz_to_wandb(
+    cfg: ExperimentConfig, fn: Union[HarmonicFn, FCNet], viz_name: str
+):
     fn.viz_2d(
         side_samples=cfg.viz_samples,
         pad=cfg.viz_pad,
@@ -154,7 +161,9 @@ def evaluate(dm: HypercubeDataModule, net: FCNet):
             enable_checkpointing=False,
         ).test(model=net, dataloaders=dl, verbose=False,)[0]["test_mse"]
 
-    wandb.run.summary["final_train_mse"] = _get_mse(dm.train_dataloader(shuffle=False))
+    wandb.run.summary["final_train_mse"] = _get_mse(
+        dm.train_dataloader(shuffle=False)
+    )
     wandb.run.summary["final_val_mse"] = _get_mse(dm.val_dataloader())
 
 

@@ -147,7 +147,9 @@ class HarmonicFn(pl.LightningModule):
             return nonzero_coords[0] > 0
 
         all_freqs = (
-            np.mgrid[tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))]
+            np.mgrid[
+                tuple(slice(-freq_limit, freq_limit + 1) for _ in range(D))
+            ]
             .reshape(D, -1)
             .T
         )
