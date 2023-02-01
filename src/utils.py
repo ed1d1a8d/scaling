@@ -158,6 +158,24 @@ def artifact_to_df(
     )
 
 
+def wandb_get_img(
+    wf: wandb.apis.public.File,
+    download_dir: Optional[str] = None,
+) -> PIL.Image.Image:
+    if download_dir is None:
+        # Create a temporary directory to download the artifact to
+        with tempfile.TemporaryDirectory() as td:
+            with open(wf.download(root=td).name, "rb") as file:
+                img = PIL.Image.open(file)
+                img.load()
+    else:
+        with open(wf.download(root=download_dir).name, "rb") as file:
+            img = PIL.Image.open(file)
+            img.load()
+
+    return img
+
+
 def wandb_run_save_objs(
     run: wandb.apis.public.Run,
     img_dict: dict[str, Union[PIL.Image.Image, str]],
