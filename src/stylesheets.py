@@ -41,5 +41,5 @@ ME_FOMO_2023 = {
         "ytick.labelsize": 9,
     },
     "col1_width": 5.50107,  # In inches
-    "col2_width": 2.69556,  # In inches, 0.49 \textwidth
+    "col2_width": 2.64049,  # In inches, 0.48 \textwidth
 }
