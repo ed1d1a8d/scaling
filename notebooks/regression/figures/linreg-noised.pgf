@@ -25,7 +25,7 @@
 \begingroup%
 \makeatletter%
 \begin{pgfpicture}%
-\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{2.949614in}{2.526325in}}%
+\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{2.806368in}{2.526325in}}%
 \pgfusepath{use as bounding box, clip}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -37,8 +37,8 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
 \pgfpathmoveto{\pgfqpoint{0.000000in}{0.000000in}}%
-\pgfpathlineto{\pgfqpoint{2.949614in}{0.000000in}}%
-\pgfpathlineto{\pgfqpoint{2.949614in}{2.526325in}}%
+\pgfpathlineto{\pgfqpoint{2.806368in}{0.000000in}}%
+\pgfpathlineto{\pgfqpoint{2.806368in}{2.526325in}}%
 \pgfpathlineto{\pgfqpoint{0.000000in}{2.526325in}}%
 \pgfpathlineto{\pgfqpoint{0.000000in}{0.000000in}}%
 \pgfpathclose%
@@ -2143,16 +2143,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.800000}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.740044in}{1.982652in}}%
-\pgfpathlineto{\pgfqpoint{2.821836in}{1.982652in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{2.849614in}{1.982652in}}{\pgfqpoint{2.849614in}{2.010430in}}%
-\pgfpathlineto{\pgfqpoint{2.849614in}{2.398547in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{2.849614in}{2.426325in}}{\pgfqpoint{2.821836in}{2.426325in}}%
-\pgfpathlineto{\pgfqpoint{0.740044in}{2.426325in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.712266in}{2.426325in}}{\pgfqpoint{0.712266in}{2.398547in}}%
-\pgfpathlineto{\pgfqpoint{0.712266in}{2.010430in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.712266in}{1.982652in}}{\pgfqpoint{0.740044in}{1.982652in}}%
-\pgfpathlineto{\pgfqpoint{0.740044in}{1.982652in}}%
+\pgfpathmoveto{\pgfqpoint{0.596797in}{1.982652in}}%
+\pgfpathlineto{\pgfqpoint{2.678590in}{1.982652in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{2.706368in}{1.982652in}}{\pgfqpoint{2.706368in}{2.010430in}}%
+\pgfpathlineto{\pgfqpoint{2.706368in}{2.398547in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{2.706368in}{2.426325in}}{\pgfqpoint{2.678590in}{2.426325in}}%
+\pgfpathlineto{\pgfqpoint{0.596797in}{2.426325in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.569019in}{2.426325in}}{\pgfqpoint{0.569019in}{2.398547in}}%
+\pgfpathlineto{\pgfqpoint{0.569019in}{2.010430in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.569019in}{1.982652in}}{\pgfqpoint{0.596797in}{1.982652in}}%
+\pgfpathlineto{\pgfqpoint{0.596797in}{1.982652in}}%
 \pgfpathclose%
 \pgfusepath{stroke,fill}%
 \end{pgfscope}%
@@ -2163,16 +2163,16 @@
 \definecolor{currentstroke}{rgb}{0.000000,0.419608,0.643137}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.767822in}{2.322158in}}%
-\pgfpathlineto{\pgfqpoint{0.906710in}{2.322158in}}%
-\pgfpathlineto{\pgfqpoint{1.045599in}{2.322158in}}%
+\pgfpathmoveto{\pgfqpoint{0.624575in}{2.322158in}}%
+\pgfpathlineto{\pgfqpoint{0.763464in}{2.322158in}}%
+\pgfpathlineto{\pgfqpoint{0.902353in}{2.322158in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=1.156710in,y=2.273547in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Least-squares}%
+\pgftext[x=1.013464in,y=2.273547in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Least-squares}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -2181,16 +2181,16 @@
 \definecolor{currentstroke}{rgb}{1.000000,0.501961,0.054902}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.767822in}{2.121541in}}%
-\pgfpathlineto{\pgfqpoint{0.906710in}{2.121541in}}%
-\pgfpathlineto{\pgfqpoint{1.045599in}{2.121541in}}%
+\pgfpathmoveto{\pgfqpoint{0.624575in}{2.121541in}}%
+\pgfpathlineto{\pgfqpoint{0.763464in}{2.121541in}}%
+\pgfpathlineto{\pgfqpoint{0.902353in}{2.121541in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=1.156710in,y=2.072930in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Least-squares (regularized)}%
+\pgftext[x=1.013464in,y=2.072930in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Least-squares (regularized)}%
 \end{pgfscope}%
 \end{pgfpicture}%
 \makeatother%
