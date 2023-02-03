@@ -25,7 +25,7 @@
 \begingroup%
 \makeatletter%
 \begin{pgfpicture}%
-\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{5.304411in}{3.850300in}}%
+\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{5.082175in}{3.672522in}}%
 \pgfusepath{use as bounding box, clip}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -37,9 +37,9 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
 \pgfpathmoveto{\pgfqpoint{0.000000in}{0.000000in}}%
-\pgfpathlineto{\pgfqpoint{5.304411in}{0.000000in}}%
-\pgfpathlineto{\pgfqpoint{5.304411in}{3.850300in}}%
-\pgfpathlineto{\pgfqpoint{0.000000in}{3.850300in}}%
+\pgfpathlineto{\pgfqpoint{5.082175in}{0.000000in}}%
+\pgfpathlineto{\pgfqpoint{5.082175in}{3.672522in}}%
+\pgfpathlineto{\pgfqpoint{0.000000in}{3.672522in}}%
 \pgfpathlineto{\pgfqpoint{0.000000in}{0.000000in}}%
 \pgfpathclose%
 \pgfusepath{fill}%
@@ -1854,16 +1854,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.800000}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.372339in}{2.041966in}}%
-\pgfpathlineto{\pgfqpoint{5.176634in}{2.041966in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{5.204411in}{2.041966in}}{\pgfqpoint{5.204411in}{2.069744in}}%
-\pgfpathlineto{\pgfqpoint{5.204411in}{3.722522in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{5.204411in}{3.750300in}}{\pgfqpoint{5.176634in}{3.750300in}}%
-\pgfpathlineto{\pgfqpoint{0.372339in}{3.750300in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.344561in}{3.750300in}}{\pgfqpoint{0.344561in}{3.722522in}}%
-\pgfpathlineto{\pgfqpoint{0.344561in}{2.069744in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.344561in}{2.041966in}}{\pgfqpoint{0.372339in}{2.041966in}}%
-\pgfpathlineto{\pgfqpoint{0.372339in}{2.041966in}}%
+\pgfpathmoveto{\pgfqpoint{0.591797in}{2.035022in}}%
+\pgfpathlineto{\pgfqpoint{4.957175in}{2.035022in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{4.982175in}{2.035022in}}{\pgfqpoint{4.982175in}{2.060022in}}%
+\pgfpathlineto{\pgfqpoint{4.982175in}{3.547522in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{4.982175in}{3.572522in}}{\pgfqpoint{4.957175in}{3.572522in}}%
+\pgfpathlineto{\pgfqpoint{0.591797in}{3.572522in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.566797in}{3.572522in}}{\pgfqpoint{0.566797in}{3.547522in}}%
+\pgfpathlineto{\pgfqpoint{0.566797in}{2.060022in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.566797in}{2.035022in}}{\pgfqpoint{0.591797in}{2.035022in}}%
+\pgfpathlineto{\pgfqpoint{0.591797in}{2.035022in}}%
 \pgfpathclose%
 \pgfusepath{stroke,fill}%
 \end{pgfscope}%
@@ -1874,16 +1874,16 @@
 \definecolor{currentstroke}{rgb}{0.000000,0.419608,0.643137}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{3.639189in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{3.639189in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{3.639189in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{3.472522in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{3.472522in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{3.472522in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=3.590578in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \citet{rosenfeld2019constructive} Figure 2b (from-scratch) }%
+\pgftext[x=0.966797in,y=3.428772in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont \citet{rosenfeld2019constructive} Figure 2b (from-scratch) }%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -1892,16 +1892,16 @@
 \definecolor{currentstroke}{rgb}{1.000000,0.501961,0.054902}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{3.430855in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{3.430855in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{3.430855in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{3.285022in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{3.285022in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{3.285022in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=3.382244in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \citet{bahri2021explaining} Figure S1 (from-scratch)}%
+\pgftext[x=0.966797in,y=3.241272in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont \citet{bahri2021explaining} Figure S1 (from-scratch)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1910,16 +1910,16 @@
 \definecolor{currentstroke}{rgb}{0.670588,0.670588,0.670588}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{{5.550000pt}{2.400000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{3.222522in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{3.222522in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{3.222522in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{3.097522in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{3.097522in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{3.097522in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=3.173911in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \citet{sorscher2022beyond} Figure 3C (data-pruning)}%
+\pgftext[x=0.966797in,y=3.053772in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont \citet{sorscher2022beyond} Figure 3C (data-pruning)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1928,16 +1928,16 @@
 \definecolor{currentstroke}{rgb}{0.349020,0.349020,0.349020}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{{5.550000pt}{2.400000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{3.014189in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{3.014189in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{3.014189in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{2.910022in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{2.910022in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{2.910022in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=2.965578in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \citet{sorscher2022beyond} Figure 4A (data-pruning \(\displaystyle +\) transfer-learning)}%
+\pgftext[x=0.966797in,y=2.866272in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont \citet{sorscher2022beyond} Figure 4A (data-pruning \(\displaystyle +\) transfer-learning)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -1946,16 +1946,16 @@
 \definecolor{currentstroke}{rgb}{0.372549,0.619608,0.819608}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{2.805855in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{2.805855in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{2.805855in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{2.722522in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{2.722522in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{2.722522in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=2.757244in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont \(\displaystyle \texttt{laion/CLIP-ViT-H-14-laion2B-s32B-b79K}\) linear probe (\(\displaystyle c = 100\))~~~~~~}%
+\pgftext[x=0.966797in,y=2.678772in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont \(\displaystyle \texttt{laion/CLIP-ViT-H-14-laion2B-s32B-b79K}\) linear probe (\(\displaystyle c = 100\))~~~~~~}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1965,16 +1965,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.500000}%
 \pgfsetdash{{1.500000pt}{2.475000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{2.597522in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{2.597522in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{2.597522in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{2.535022in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{2.535022in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{2.535022in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=2.548911in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Random guessing (\(\displaystyle 90\%\))}%
+\pgftext[x=0.966797in,y=2.491272in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont Random guessing (\(\displaystyle 90\%\))}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1984,16 +1984,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.500000}%
 \pgfsetdash{{4.500000pt}{1.500000pt}{1.500000pt}{1.500000pt}{1.500000pt}{1.500000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{2.389189in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{2.389189in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{2.389189in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{2.347522in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{2.347522in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{2.347522in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=2.340578in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont Human performance (\(\displaystyle 4.57\%\))}%
+\pgftext[x=0.966797in,y=2.303772in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont Human performance (\(\displaystyle 4.57\%\))}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -2003,16 +2003,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.500000}%
 \pgfsetdash{{9.600000pt}{2.400000pt}{1.500000pt}{2.400000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.400117in}{2.180855in}}%
-\pgfpathlineto{\pgfqpoint{0.539005in}{2.180855in}}%
-\pgfpathlineto{\pgfqpoint{0.677894in}{2.180855in}}%
+\pgfpathmoveto{\pgfqpoint{0.616797in}{2.160022in}}%
+\pgfpathlineto{\pgfqpoint{0.741797in}{2.160022in}}%
+\pgfpathlineto{\pgfqpoint{0.866797in}{2.160022in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=0.789005in,y=2.132244in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont SOTA (\(\displaystyle 0.05\%\), paperswithcode.com 2023-02-02)}%
+\pgftext[x=0.966797in,y=2.116272in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont SOTA (\(\displaystyle 0.05\%\), paperswithcode.com 2023-02-02)}%
 \end{pgfscope}%
 \end{pgfpicture}%
 \makeatother%

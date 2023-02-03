@@ -25,7 +25,7 @@
 \begingroup%
 \makeatletter%
 \begin{pgfpicture}%
-\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{5.006151in}{3.020424in}}%
+\pgfpathrectangle{\pgfpointorigin}{\pgfqpoint{5.006151in}{2.946813in}}%
 \pgfusepath{use as bounding box, clip}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -38,8 +38,8 @@
 \pgfsetdash{}{0pt}%
 \pgfpathmoveto{\pgfqpoint{0.000000in}{0.000000in}}%
 \pgfpathlineto{\pgfqpoint{5.006151in}{0.000000in}}%
-\pgfpathlineto{\pgfqpoint{5.006151in}{3.020424in}}%
-\pgfpathlineto{\pgfqpoint{0.000000in}{3.020424in}}%
+\pgfpathlineto{\pgfqpoint{5.006151in}{2.946813in}}%
+\pgfpathlineto{\pgfqpoint{0.000000in}{2.946813in}}%
 \pgfpathlineto{\pgfqpoint{0.000000in}{0.000000in}}%
 \pgfpathclose%
 \pgfusepath{fill}%
@@ -1469,16 +1469,16 @@
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetstrokeopacity{0.800000}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{0.786285in}{2.253758in}}%
-\pgfpathlineto{\pgfqpoint{4.762688in}{2.253758in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{4.790466in}{2.253758in}}{\pgfqpoint{4.790466in}{2.281535in}}%
-\pgfpathlineto{\pgfqpoint{4.790466in}{2.892647in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{4.790466in}{2.920424in}}{\pgfqpoint{4.762688in}{2.920424in}}%
-\pgfpathlineto{\pgfqpoint{0.786285in}{2.920424in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.758507in}{2.920424in}}{\pgfqpoint{0.758507in}{2.892647in}}%
-\pgfpathlineto{\pgfqpoint{0.758507in}{2.281535in}}%
-\pgfpathquadraticcurveto{\pgfqpoint{0.758507in}{2.253758in}}{\pgfqpoint{0.786285in}{2.253758in}}%
-\pgfpathlineto{\pgfqpoint{0.786285in}{2.253758in}}%
+\pgfpathmoveto{\pgfqpoint{0.949361in}{2.246813in}}%
+\pgfpathlineto{\pgfqpoint{4.599612in}{2.246813in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{4.624612in}{2.246813in}}{\pgfqpoint{4.624612in}{2.271813in}}%
+\pgfpathlineto{\pgfqpoint{4.624612in}{2.821813in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{4.624612in}{2.846813in}}{\pgfqpoint{4.599612in}{2.846813in}}%
+\pgfpathlineto{\pgfqpoint{0.949361in}{2.846813in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.924361in}{2.846813in}}{\pgfqpoint{0.924361in}{2.821813in}}%
+\pgfpathlineto{\pgfqpoint{0.924361in}{2.271813in}}%
+\pgfpathquadraticcurveto{\pgfqpoint{0.924361in}{2.246813in}}{\pgfqpoint{0.949361in}{2.246813in}}%
+\pgfpathlineto{\pgfqpoint{0.949361in}{2.246813in}}%
 \pgfpathclose%
 \pgfusepath{stroke,fill}%
 \end{pgfscope}%
@@ -1489,16 +1489,16 @@
 \definecolor{currentstroke}{rgb}{0.000000,0.419608,0.643137}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{{1.500000pt}{2.475000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.814062in}{2.809313in}}%
-\pgfpathlineto{\pgfqpoint{0.952951in}{2.809313in}}%
-\pgfpathlineto{\pgfqpoint{1.091840in}{2.809313in}}%
+\pgfpathmoveto{\pgfqpoint{0.974361in}{2.746813in}}%
+\pgfpathlineto{\pgfqpoint{1.099361in}{2.746813in}}%
+\pgfpathlineto{\pgfqpoint{1.224361in}{2.746813in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=1.202951in,y=2.760702in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=128\)}%
+\pgftext[x=1.324361in,y=2.703063in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=128\)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1507,16 +1507,16 @@
 \definecolor{currentstroke}{rgb}{1.000000,0.501961,0.054902}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{{1.500000pt}{2.475000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.814062in}{2.615640in}}%
-\pgfpathlineto{\pgfqpoint{0.952951in}{2.615640in}}%
-\pgfpathlineto{\pgfqpoint{1.091840in}{2.615640in}}%
+\pgfpathmoveto{\pgfqpoint{0.974361in}{2.572508in}}%
+\pgfpathlineto{\pgfqpoint{1.099361in}{2.572508in}}%
+\pgfpathlineto{\pgfqpoint{1.224361in}{2.572508in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=1.202951in,y=2.567029in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=256\)}%
+\pgftext[x=1.324361in,y=2.528758in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=256\)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
@@ -1525,16 +1525,16 @@
 \definecolor{currentstroke}{rgb}{0.349020,0.349020,0.349020}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{{1.500000pt}{2.475000pt}}{0.000000pt}%
-\pgfpathmoveto{\pgfqpoint{0.814062in}{2.421968in}}%
-\pgfpathlineto{\pgfqpoint{0.952951in}{2.421968in}}%
-\pgfpathlineto{\pgfqpoint{1.091840in}{2.421968in}}%
+\pgfpathmoveto{\pgfqpoint{0.974361in}{2.398202in}}%
+\pgfpathlineto{\pgfqpoint{1.099361in}{2.398202in}}%
+\pgfpathlineto{\pgfqpoint{1.224361in}{2.398202in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=1.202951in,y=2.373357in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=512\)}%
+\pgftext[x=1.324361in,y=2.354452in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=512\)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -1543,16 +1543,16 @@
 \definecolor{currentstroke}{rgb}{0.000000,0.419608,0.643137}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{2.504038in}{2.809313in}}%
-\pgfpathlineto{\pgfqpoint{2.642927in}{2.809313in}}%
-\pgfpathlineto{\pgfqpoint{2.781816in}{2.809313in}}%
+\pgfpathmoveto{\pgfqpoint{2.520872in}{2.746813in}}%
+\pgfpathlineto{\pgfqpoint{2.645872in}{2.746813in}}%
+\pgfpathlineto{\pgfqpoint{2.770872in}{2.746813in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=2.892927in,y=2.760702in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=128\) (regularized)}%
+\pgftext[x=2.870872in,y=2.703063in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=128\) (regularized)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -1561,16 +1561,16 @@
 \definecolor{currentstroke}{rgb}{1.000000,0.501961,0.054902}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{2.504038in}{2.600980in}}%
-\pgfpathlineto{\pgfqpoint{2.642927in}{2.600980in}}%
-\pgfpathlineto{\pgfqpoint{2.781816in}{2.600980in}}%
+\pgfpathmoveto{\pgfqpoint{2.520872in}{2.559313in}}%
+\pgfpathlineto{\pgfqpoint{2.645872in}{2.559313in}}%
+\pgfpathlineto{\pgfqpoint{2.770872in}{2.559313in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=2.892927in,y=2.552369in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=256\) (regularized)}%
+\pgftext[x=2.870872in,y=2.515563in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=256\) (regularized)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetrectcap%
@@ -1579,16 +1579,16 @@
 \definecolor{currentstroke}{rgb}{0.349020,0.349020,0.349020}%
 \pgfsetstrokecolor{currentstroke}%
 \pgfsetdash{}{0pt}%
-\pgfpathmoveto{\pgfqpoint{2.504038in}{2.392647in}}%
-\pgfpathlineto{\pgfqpoint{2.642927in}{2.392647in}}%
-\pgfpathlineto{\pgfqpoint{2.781816in}{2.392647in}}%
+\pgfpathmoveto{\pgfqpoint{2.520872in}{2.371813in}}%
+\pgfpathlineto{\pgfqpoint{2.645872in}{2.371813in}}%
+\pgfpathlineto{\pgfqpoint{2.770872in}{2.371813in}}%
 \pgfusepath{stroke}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \definecolor{textcolor}{rgb}{0.000000,0.000000,0.000000}%
 \pgfsetstrokecolor{textcolor}%
 \pgfsetfillcolor{textcolor}%
-\pgftext[x=2.892927in,y=2.344035in,left,base]{\color{textcolor}\rmfamily\fontsize{10.000000}{12.000000}\selectfont FC-NN, \(\displaystyle w=512\) (regularized)}%
+\pgftext[x=2.870872in,y=2.328063in,left,base]{\color{textcolor}\rmfamily\fontsize{9.000000}{10.800000}\selectfont FC-NN, \(\displaystyle w=512\) (regularized)}%
 \end{pgfscope}%
 \begin{pgfscope}%
 \pgfsetbuttcap%
