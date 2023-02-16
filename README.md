@@ -1,3 +1,7 @@
+# Scaling
+Code for investigating neural scaling laws.
+Associated paper: https://arxiv.org/abs/2302.07348
+
 ## Setup
 
 1. Create a conda environment:
