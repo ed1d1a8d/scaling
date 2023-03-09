@@ -1,24 +1,18 @@
-# We use Python 3.9 (nvidia rapids needs 3.8 or 3.9)
+# We use Python 3.10 (nvidia rapids needs 3.8 or 3.9)
 
-# PyTorch 1.12
-# 1.13 has a bug on supercloud:
-#   https://discuss.pytorch.org/t/torch-cuda-device-count-is-0/168545/6
-# We use CUDA 11.6 for supercloud support
---extra-index-url https://download.pytorch.org/whl/cu116
-torch==1.12.1+cu116
-torchvision==0.13.1+cu116
-torchaudio==0.12.1
+# PyTorch 1.13
+# We use CUDA 11.7 on ccg-gpu
+torch==1.13.1
+torchvision==0.14.1
+torchaudio==0.13.1
 
 # Jax
---find-links https://storage.googleapis.com/jax-releases/jax_releases.html
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 jax[cuda]
 
 # Nvidia RAPIDS (for fast linear probes, knn, and umap)
 # See https://rapids.ai/pip.html#install
---find-links https://developer.download.nvidia.com/compute/redist/cudf-cu11
---find-links https://developer.download.nvidia.com/compute/redist/dask-cudf-cu11
---find-links https://developer.download.nvidia.com/compute/redist/cuml-cu11
---find-links https://developer.download.nvidia.com/compute/redist/cugraph-cu11
+--extra-index-url https://pypi.nvidia.com
 cudf-cu11
 dask-cudf-cu11
 cuml-cu11
@@ -52,7 +46,7 @@ torchtyping
 simple-parsing
 
 # ThunderSVM
-/home/gridsan/groups/ccg/programs/thundersvm/python
+# /home/gridsan/groups/ccg/programs/thundersvm/python
 
 # UMAP
 umap-learn
@@ -64,14 +58,14 @@ plotly
 
 # Experiment management
 # Older version due to https://github.com/wandb/wandb/issues/4779
-wandb==0.13.7
+wandb
 
 # Utilities
 black
 flake8
 gpustat
 isort
-ipywidgets==7.7.0 # https://github.com/microsoft/vscode-jupyter/issues/11014
+ipywidgets==7.7.3 # https://github.com/microsoft/vscode-jupyter/issues/11014
 jupyterlab
 mypy
 tqdm
