@@ -49,8 +49,8 @@ class Config:
     # Optimizer
     optimizer: OptimizerT = OptimizerT.Adam
     momentum: float = 0.9  # only for SGD
-    weight_decay: float = 1e-3
-    lr: float = 1e-5
+    weight_decay: float = 0
+    lr: float = 1e-3
     min_lr: float = 1e-6
     lr_decay_patience_evals: int = 5
 
