@@ -18,7 +18,7 @@ class BaseDatasetConfig(ABC):
     """
 
     id: str
-    data_dir: str = "/home/gridsan/groups/ccg/data-downloads"
+    data_dir: str = "/projects/scaling/data-downloads"
 
     @property
     @abstractmethod
