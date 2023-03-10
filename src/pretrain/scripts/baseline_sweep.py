@@ -30,6 +30,8 @@ class Config:
     n_train_max: int = 50_000
     n_val: int = 256
 
+    weight_decay: float = 1e-4
+
     tags: tuple[str, ...] = ("try-1",)
 
     max_workers: int = 30
@@ -84,6 +86,7 @@ def main(cfg: Config):
                     f"--dataset_cfg {cfg.dataset_cfg}",
                     f"--n_train {n_train}",
                     f"--n_val_override {cfg.n_val}",
+                    f"--weight_decay {cfg.weight_decay}",
                     f"--seed {seed}",
                     f"--tags {' '.join(cfg.tags)}",
                 ]
