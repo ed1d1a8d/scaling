@@ -104,6 +104,7 @@ def main(cfg: Config):
             ),
             commands,
             max_workers=cfg.max_workers,
+            chunksize=1,
         )
 
 
