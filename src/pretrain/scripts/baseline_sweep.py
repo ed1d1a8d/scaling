@@ -26,15 +26,13 @@ class Config:
     seed_start: int = 0  # inclusive
     seed_end: int = 1  # exclusive
 
-    n_train_min: int = 384
-    n_train_max: int = 50_000
-    n_val: int = 256
+    n_train_min: int = 512
+    total_dataset_size: int = 50_000
+    n_val: int = 2000
 
-    weight_decay: float = 1e-4
+    tags: tuple[str, ...] = ("try-2",)
 
-    tags: tuple[str, ...] = ("try-1",)
-
-    max_workers: int = 30
+    max_workers: int = 24
     gpu_start_idx: int = 0  # inclusive
     gpu_end_idx: int = 6  # exclusive
 
@@ -49,13 +47,13 @@ class Config:
         base = 1
         while True:
             for i in range(1, 10):
-                if base * i < self.n_train_min:
+                if base * i + self.n_val < self.n_train_min + self.n_val:
                     continue
-                elif base * i >= self.n_train_max:
-                    yield self.n_train_max
+                elif base * i + self.n_val >= self.total_dataset_size:
+                    yield self.total_dataset_size
                     return
                 else:
-                    yield base * i
+                    yield base * i + self.n_val
             base *= 10
 
 
@@ -86,7 +84,6 @@ def main(cfg: Config):
                     f"--dataset_cfg {cfg.dataset_cfg}",
                     f"--n_train {n_train}",
                     f"--n_val_override {cfg.n_val}",
-                    f"--weight_decay {cfg.weight_decay}",
                     f"--seed {seed}",
                     f"--tags {' '.join(cfg.tags)}",
                 ]
