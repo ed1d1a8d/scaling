@@ -12,14 +12,15 @@ import os
 from typing import Optional
 
 import numpy as np
+import PIL.Image
 import torch
 import torch.nn.functional as F
 import torch.utils.data
 import torchvision.models.resnet
-import torchvision.transforms
 import wandb
 from simple_parsing import ArgumentParser, subgroups
 from torch import nn
+from torchvision import transforms
 from tqdm.auto import tqdm
 
 from src import utils
@@ -47,12 +48,12 @@ class Config:
     dataset_cfg: BaseDatasetConfig = subgroups(get_dataset_index())  # type: ignore
 
     # Optimizer
-    optimizer: OptimizerT = OptimizerT.Adam
+    optimizer: OptimizerT = OptimizerT.SGD
     momentum: float = 0.9  # only for SGD
-    weight_decay: float = 0
-    lr: float = 1e-3
-    min_lr: float = 1e-6
-    lr_decay_patience_evals: int = 5
+    weight_decay: float = 1e-3
+    lr: float = 0.1
+    min_lr: float = 0
+    lr_decay_patience_evals: int = 25
 
     # Initialization
     init_with_trained_linear_probe: bool = False
@@ -60,7 +61,7 @@ class Config:
 
     # Train config
     n_train: int = 2048
-    batch_size: int = 128
+    batch_size: int = 512
     n_layers_to_freeze: int = 0
 
     # Validation config
@@ -72,9 +73,10 @@ class Config:
 
     # Eval config
     eval_batch_size: int = 512
-    samples_per_eval: int = 25000  # aka epoch size
+    samples_per_eval: int = 50000  # aka epoch size
     n_imgs_to_log_per_eval: int = 15
     log_imgs_during_training: bool = False
+    n_evals: int = 50
 
     # Other options
     seed: int = 0
@@ -154,6 +156,7 @@ class BatchOutput:
     acc: float
 
     losses: Optional[torch.Tensor] = None
+    accs: Optional[torch.Tensor] = None
 
 
 def process_batch(
@@ -161,7 +164,7 @@ def process_batch(
     labs: torch.Tensor,
     model: nn.Module,
     eval_mode: bool = False,
-    per_sample_loss: bool = False,
+    per_sample_metrics: bool = False,
 ):
     imgs = imgs.cuda()
     labs = labs.cuda()
@@ -173,7 +176,9 @@ def process_batch(
             loss = F.cross_entropy(logits, labs)
 
             losses = None
-            if per_sample_loss:
+            accs = None
+            if per_sample_metrics:
+                accs = (preds == labs).float()
                 losses = F.cross_entropy(logits, labs, reduction="none")
 
     acc = (preds == labs).float().mean().item()
@@ -186,6 +191,7 @@ def process_batch(
         loss=loss,
         acc=acc,
         losses=losses,
+        accs=accs,
     )
 
 
@@ -209,13 +215,14 @@ class EvalOutput:
     metrics: dict[str, WBMetric[float]]
     imgs_to_log: list[wandb.Image]
     per_sample_losses: Optional[np.ndarray] = None
+    per_sample_accs: Optional[np.ndarray] = None
 
 
 def evaluate(
     model: nn.Module,
     loader: torch.utils.data.DataLoader,
     cfg: Config,
-    per_sample_loss: bool = False,
+    per_sample_metrics: bool = False,
 ) -> EvalOutput:
     n: int = len(loader.dataset)  # type: ignore
 
@@ -226,6 +233,7 @@ def evaluate(
     labs: torch.Tensor
     imgs_to_log: list[wandb.Image] = []
     per_sample_losses: list[float] = []
+    per_sample_accs: list[float] = []
     with tqdm(total=len(loader)) as pbar:
         for imgs, labs in loader:
             bo = process_batch(
@@ -233,13 +241,15 @@ def evaluate(
                 labs=labs,
                 model=model,
                 eval_mode=True,
-                per_sample_loss=per_sample_loss,
+                per_sample_metrics=per_sample_metrics,
             )
 
             n_correct += bo.acc * bo.size
             tot_loss += bo.loss.item() * bo.size
             if bo.losses is not None:
                 per_sample_losses.extend(bo.losses.tolist())
+            if bo.accs is not None:
+                per_sample_accs.extend(bo.accs.tolist())
 
             if len(imgs_to_log) == 0:
                 imgs_to_log = get_imgs_to_log(bo=bo, cfg=cfg)
@@ -253,7 +263,10 @@ def evaluate(
         ),
         imgs_to_log=imgs_to_log,
         per_sample_losses=np.array(per_sample_losses)
-        if per_sample_loss
+        if per_sample_metrics
+        else None,
+        per_sample_accs=np.array(per_sample_accs)
+        if per_sample_metrics
         else None,
     )
 
@@ -265,18 +278,23 @@ def train(
     cfg: Config,
 ):
     optimizer = cfg.get_optimizer(model)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer,
-        mode="min",
-        factor=0.1,
-        min_lr=0.1 * cfg.min_lr,
-        patience=cfg.lr_decay_patience_evals,
-        verbose=True,
+        T_max=cfg.n_evals,
     )
+    # torch.optim.lr_scheduler.ReduceLROnPlateau(
+    #     optimizer=optimizer,
+    #     mode="min",
+    #     factor=0.1,
+    #     min_lr=0.1 * cfg.min_lr,
+    #     patience=cfg.lr_decay_patience_evals,
+    #     verbose=True,
+    # )
     scaler = torch.cuda.amp.GradScaler()  # type: ignore
 
     n_steps: int = 0
     n_epochs: int = 0
+    n_evals: int = 0
     min_val_loss: float = np.inf
     with tqdm() as pbar:
         model.train()
@@ -290,6 +308,9 @@ def train(
                         "Validation loss has stopped improving. Stopping training..."
                     )
                     return
+                if n_evals >= cfg.n_evals:
+                    print("Max evals reached. Stopping training...")
+                    return
 
                 log_dict: dict[str, WBMetric] = dict()
                 is_validation_step: bool = n_steps % cfg.steps_per_eval == 0
@@ -301,7 +322,6 @@ def train(
                     model.train(is_training)
 
                     val_loss: float = vout.metrics["loss"].data
-                    lr_scheduler.step(val_loss)
                     if val_loss < min_val_loss:
                         min_val_loss = val_loss
                         wandb.run.summary["best_checkpoint_steps"] = n_steps  # type: ignore
@@ -311,6 +331,7 @@ def train(
                             log_dict["val_imgs"] = WBMetric(vout.imgs_to_log)
 
                     log_dict |= tag_dict(vout.metrics, prefix=f"val_")
+                    n_evals += 1
 
                 bo = process_batch(
                     imgs=imgs,
@@ -330,6 +351,9 @@ def train(
                 scaler.scale(bo.loss).backward()  # type: ignore
                 scaler.step(optimizer)
                 scaler.update()
+                if is_validation_step:
+                    # We want to step after we do an optimizer step.
+                    lr_scheduler.step()
 
                 n_steps += 1
                 pbar.update(1)
@@ -351,22 +375,141 @@ def train(
             n_epochs += 1
 
 
+def ReflectionPadding(margin=(4, 4)):
+    def _reflection_padding(x):
+        x = np.asarray(x)
+        if len(x.shape) == 2:
+            x = np.pad(
+                x,
+                [(margin[0], margin[0]), (margin[1], margin[1])],
+                mode="reflect",  # type: ignore
+            )
+        elif len(x.shape) == 3:
+            x = np.pad(
+                x,
+                [(margin[0], margin[0]), (margin[1], margin[1]), (0, 0)],
+                mode="reflect",  # type: ignore
+            )
+
+        return PIL.Image.fromarray(x)
+
+    return transforms.Lambda(_reflection_padding)
+
+
+def conv_bn(
+    channels_in,
+    channels_out,
+    kernel_size=3,
+    stride=1,
+    padding=1,
+    groups=1,
+    bn=True,
+    activation=True,
+):
+    op = [
+        torch.nn.Conv2d(
+            channels_in,
+            channels_out,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            bias=False,
+        ),
+    ]
+    if bn:
+        op.append(nn.BatchNorm2d(channels_out))
+    if activation:
+        op.append(nn.ReLU(inplace=True))
+    return torch.nn.Sequential(*op)
+
+
+class Residual(torch.nn.Module):
+    def __init__(self, module):
+        super(Residual, self).__init__()
+        self.module = module
+
+    def forward(self, x):
+        return x + self.module(x)
+
+
+class Mul(torch.nn.Module):
+    def __init__(self, weight):
+        super(Mul, self).__init__()
+        self.weight = weight
+
+    def forward(self, x):
+        return x * self.weight
+
+
+def build_network(num_class=10):
+    return torch.nn.Sequential(
+        conv_bn(3, 64, kernel_size=3, stride=1, padding=1),
+        conv_bn(64, 128, kernel_size=5, stride=2, padding=2),
+        # torch.nn.MaxPool2d(2),
+        Residual(
+            torch.nn.Sequential(
+                conv_bn(128, 128),
+                conv_bn(128, 128),
+            )
+        ),
+        conv_bn(128, 256, kernel_size=3, stride=1, padding=1),
+        torch.nn.MaxPool2d(2),
+        Residual(
+            torch.nn.Sequential(
+                conv_bn(256, 256),
+                conv_bn(256, 256),
+            )
+        ),
+        conv_bn(256, 128, kernel_size=3, stride=1, padding=0),
+        torch.nn.AdaptiveMaxPool2d((1, 1)),
+        nn.Flatten(),
+        torch.nn.Linear(128, num_class, bias=False),
+        Mul(0.2),  # wtf...
+    )
+
+
 def run_experiment(cfg: Config):
     torch.manual_seed(cfg.seed)
+    print("Constructing resnet model...")
+    # model = torchvision.models.resnet.resnet18(
+    #     num_classes=len(cfg.class_names)
+    # ).cuda()
+    # From https://github.com/wbaek/torchskeleton/blob/v0.2.1_dawnbench_cifar10_release/bin/dawnbench/cifar10.py
+    model = build_network(num_class=len(cfg.class_names)).cuda()
 
-    # Magic numbers from https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
-    preprocess = torchvision.transforms.Compose(
+    # From https://github.com/bkj/basenet/blob/49b2b61e5b9420815c64227c5a10233267c1fb14/examples/cifar10.py
+    cifar10_stats = {
+        "mean": (0.4914, 0.4822, 0.4465),
+        "std": (0.24705882352941178, 0.24352941176470588, 0.2615686274509804),
+    }
+    transform_train = transforms.Compose(
         [
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+            transforms.Lambda(lambda x: np.asarray(x)),
+            transforms.Lambda(
+                lambda x: np.pad(
+                    x,
+                    [(4, 4), (4, 4), (0, 0)],
+                    mode="reflect",  # type: ignore
+                )
             ),
+            transforms.Lambda(lambda x: PIL.Image.fromarray(x)),
+            transforms.RandomCrop(32),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(cifar10_stats["mean"], cifar10_stats["std"]),
+        ]
+    )
+    transform_test = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(cifar10_stats["mean"], cifar10_stats["std"]),
         ]
     )
 
     print(f"Loading dataset {cfg.dataset_cfg.id}...")
-    ds_train_full = cfg.dataset_cfg.get_train_ds(preprocess)
-    ds_test = cfg.dataset_cfg.get_test_ds(preprocess)
+    ds_train_full = cfg.dataset_cfg.get_train_ds(transform_train)
+    ds_test = cfg.dataset_cfg.get_test_ds(transform_test)
 
     # Create train and val datasets from ds_train_full
     ds_train, ds_val, _ = torch.utils.data.random_split(
@@ -382,11 +525,6 @@ def run_experiment(cfg: Config):
     loader_train = cfg.get_loader(ds_train, eval_mode=False)
     loader_val = cfg.get_loader(ds_val, eval_mode=True)
     loader_test = cfg.get_loader(ds_test, eval_mode=True)
-
-    print("Constructing resnet model...")
-    model = torchvision.models.resnet.resnet18(
-        num_classes=len(cfg.class_names)
-    ).cuda()
 
     print("Evaluating test error of model at init...")
     model.eval()
@@ -414,18 +552,22 @@ def run_experiment(cfg: Config):
     print("Evaluating on test set...")
     model.eval()
     tout = evaluate(
-        model=model, loader=loader_test, cfg=cfg, per_sample_loss=True
+        model=model, loader=loader_test, cfg=cfg, per_sample_metrics=True
     )
     WANDB_MANAGER.log({f"test_imgs": WBMetric(tout.imgs_to_log)})
     test_metrics = tag_dict(tout.metrics, prefix="test_")
     for name, metric in test_metrics.items():
         wandb.run.summary[name] = metric.data  # type: ignore
 
-    # Save per-sample losses as file to wandb directory
     if tout.per_sample_losses is not None:
         np.save(
             os.path.join(wandb.run.dir, "per_sample_losses.npy"),  # type: ignore
             tout.per_sample_losses,
+        )
+    if tout.per_sample_accs is not None:
+        np.save(
+            os.path.join(wandb.run.dir, "per_sample_accs.npy"),  # type: ignore
+            tout.per_sample_accs,
         )
 
     print("Finished experiment!")
